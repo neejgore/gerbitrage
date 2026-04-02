@@ -538,12 +538,11 @@ _EXTRACT_ALL_WINES_JS = """
         const lines = text.split('\\n').map(l => l.trim()).filter(Boolean);
         const name = lines[0] || '';
 
-        // Find a price line — match any currency symbol ($, €, £, ¥, etc.)
+        // Find a price line: "$NNN.NN" (USD — forced via /US/en/ URL)
         let price = null;
         let num_merchants = 1;
         for (const line of lines) {
-            const pm = line.match(/^[\\$€£¥]([\\d,]+(?:\\.\\d{1,2})?)$/) ||
-                       line.match(/^([\\d,]+(?:\\.\\d{1,2})?)\\s*[\\$€£¥]$/);
+            const pm = line.match(/^\\$([\\d,]+(?:\\.\\d{1,2})?)$/);
             if (pm) { price = parseFloat(pm[1].replace(/,/g, '')); break; }
         }
         // Also check sibling/parent text for price if not found in link text
@@ -551,7 +550,7 @@ _EXTRACT_ALL_WINES_JS = """
             const parent = link.closest('div, li, article') || link.parentElement;
             if (parent) {
                 const parentText = parent.innerText || '';
-                const pm = parentText.match(/[\\$€£¥]([\\d,]+(?:\\.\\d{1,2})?)/);
+                const pm = parentText.match(/\\$([\\d,]+(?:\\.\\d{1,2})?)/);
                 if (pm) price = parseFloat(pm[1].replace(/,/g, ''));
                 const mm = parentText.match(/(\\d+)\\s+merchant/i);
                 if (mm) num_merchants = parseInt(mm[1]);
