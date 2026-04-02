@@ -21,6 +21,10 @@ if [ -d "$SEED_DIR" ]; then
     done
 fi
 
+echo "[web] Starting background pricing worker…"
+bash scripts/start_worker.sh >> /tmp/worker.log 2>&1 &
+echo "[web] Worker PID: $!"
+
 echo "[web] Starting Gerbitrage API on port ${PORT:-8000}…"
 exec uvicorn app.main:app \
     --host 0.0.0.0 \
