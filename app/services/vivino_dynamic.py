@@ -97,12 +97,11 @@ async def _run_lookup(
             await browser.close()
 
     if result:
-        # Persist under vintage-specific key when available so the next
-        # request for the same wine+year is an instant cache hit
+        # Persist under vintage-specific key when available
         disk_key = f"{wine_id}-{vintage}" if vintage else wine_id
         update_price_cache(disk_key, result)
 
-        # Also update Redis so the aggregator finds it on next call
+        # Also update Redis
         avg = result.get("avg_price")
         if avg:
             from app.schemas.pricing import PricingBreakdown, PricingSource
@@ -130,15 +129,86 @@ async def _run_lookup(
                     )
                 ],
             )
-            cache_key = pricing_cache_key(wine_id, vintage)
-            await cache_set(cache_key, breakdown.model_dump(), ttl=43200)  # 12 h
+            cache_key_str = pricing_cache_key(wine_id, vintage)
+            await cache_set(cache_key_str, breakdown.model_dump(), ttl=43200)
+
+        # Add to extended catalog so future fuzzy-match queries find it
+        if wine_name and wine_id:
+            _add_to_extended_catalog(
+                wine_id=wine_id,
+                wine_name=wine_name,
+                producer=producer,
+                avg_price=result.get("avg_price"),
+                vivino_url=result.get("url"),
+                vivino_rating=result.get("vivino_rating"),
+                vivino_id=result.get("vivino_wine_id", ""),
+            )
 
         logger.info(
-            "Dynamic Vivino: cached '%s' → avg $%.0f",
+            "Dynamic Vivino: cached '%s' → avg $%.0f (added to catalog)",
             wine_id, result.get("avg_price", 0),
         )
     else:
         logger.info("Dynamic Vivino: no result for '%s'", wine_id)
+
+
+def _add_to_extended_catalog(
+    wine_id: str,
+    wine_name: str,
+    producer: str,
+    avg_price: Optional[float],
+    vivino_url: Optional[str],
+    vivino_rating: Optional[float],
+    vivino_id: str,
+) -> None:
+    """Add a newly discovered wine to extended_catalog.json."""
+    import json as _json
+    import re
+    import unicodedata
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    catalog_path = Path(__file__).parent.parent / "data" / "extended_catalog.json"
+    try:
+        catalog: dict = _json.loads(catalog_path.read_text()) if catalog_path.exists() else {}
+    except Exception:
+        catalog = {}
+
+    if wine_id in catalog:
+        return  # already present
+
+    def _price_tier(p: float) -> str:
+        if p <= 25: return "budget"
+        if p <= 75: return "mid"
+        if p <= 200: return "premium"
+        if p <= 600: return "luxury"
+        return "ultra"
+
+    catalog[wine_id] = {
+        "id": wine_id,
+        "name": wine_name,
+        "producer": producer,
+        "region": "",
+        "country": "",
+        "appellation": "",
+        "varietal": "",
+        "wine_type": "red",
+        "avg_retail_price": avg_price or 0.0,
+        "price_tier": _price_tier(avg_price or 0.0),
+        "vivino_wine_id": vivino_id,
+        "vivino_url": vivino_url or "",
+        "vivino_rating": vivino_rating,
+        "vivino_ratings_count": None,
+        "vintage": None,
+        "discovered_at": datetime.now(timezone.utc).isoformat(),
+        "source": "dynamic_lookup",
+    }
+
+    try:
+        catalog_path.write_text(_json.dumps(catalog, indent=2, ensure_ascii=False))
+        logger.info("Extended catalog: added '%s' (%s)", wine_name, wine_id)
+    except Exception as exc:
+        logger.warning("Could not update extended catalog: %s", exc)
 
 
 def _get_tier(price: float) -> str:

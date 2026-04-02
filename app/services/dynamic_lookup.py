@@ -128,8 +128,13 @@ async def dynamic_lookup(
     """
     Try to get pricing for a wine that wasn't found in the static catalog.
 
-    Returns None only if both tiers fail entirely (very unlikely for a
-    recognisable wine name).
+    Immediately returns an estimate from one of:
+      Tier 1 – Wine-Searcher live (if API key present)
+      Tier 2 – Regional proxy estimate
+
+    In parallel, fires a background Vivino search that will:
+      - Cache the real price under vivino_prices_cache.json
+      - Add the wine to extended_catalog.json for future fuzzy matching
     """
     cache_key = _dynamic_cache_key(raw_text, parsed.vintage)
     cached = await cache_get(cache_key)
@@ -150,7 +155,52 @@ async def dynamic_lookup(
         ttl = _LIVE_TTL if result.data_source == "wine_searcher_live" else _PROXY_TTL
         await cache_set(cache_key, result.to_dict(), ttl=ttl)
 
+    # Background: search Vivino for real pricing and add wine to catalog.
+    # This is fire-and-forget — the current request returns the estimate above
+    # while Vivino runs in the background. Future requests will be cache hits.
+    _fire_vivino_discovery(raw_text, parsed)
+
     return result
+
+
+def _fire_vivino_discovery(raw_text: str, parsed: ParsedWine) -> None:
+    """
+    Schedule a background Vivino search for an unknown wine.
+    Uses the dynamic vivino lookup module which writes to both
+    vivino_prices_cache.json and extended_catalog.json when a match is found.
+    """
+    import asyncio
+    import re
+    import unicodedata
+
+    def _slugify(s: str) -> str:
+        nfkd = unicodedata.normalize("NFD", s.lower())
+        s2 = "".join(c for c in nfkd if unicodedata.category(c) != "Mn")
+        s2 = re.sub(r"[^a-z0-9]+", "-", s2).strip("-")
+        return s2[:60]
+
+    wine_name = parsed.wine_name or raw_text
+    producer = parsed.producer or ""
+    wine_id = _slugify(f"{producer}-{wine_name}" if producer else wine_name)
+
+    try:
+        from app.services.vivino_dynamic import dynamic_lookup as vivino_bg_lookup
+        loop = asyncio.get_running_loop()
+        loop.create_task(
+            vivino_bg_lookup(
+                wine_id=wine_id,
+                wine_name=wine_name,
+                producer=producer,
+                vintage=parsed.vintage,
+            ),
+            name=f"vivino_discovery:{wine_id}",
+        )
+        logger.info(
+            "Background Vivino discovery queued for '%s' (id=%s)",
+            raw_text[:50], wine_id,
+        )
+    except RuntimeError:
+        pass  # No running event loop (e.g. during tests)
 
 
 # ---------------------------------------------------------------------------
