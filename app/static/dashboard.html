@@ -354,11 +354,12 @@ function renderStats(s) {
   const pricing = s.pricing;
 
   // KPIs
-  document.getElementById('kpi-total').textContent = cat.base_wines.toLocaleString();
+  document.getElementById('kpi-total').textContent = cat.total_wines.toLocaleString();
   document.getElementById('kpi-extended').textContent =
     cat.extended_wines > 0 ? `+${cat.extended_wines.toLocaleString()} extended` : 'Extended catalog building…';
   document.getElementById('kpi-priced').textContent = pricing.vivino_priced.toLocaleString();
-  document.getElementById('kpi-priced-sub').textContent = `${pricing.vivino_coverage_pct}% coverage`;
+  document.getElementById('kpi-priced-sub').textContent =
+    `${pricing.vivino_coverage_pct}% coverage · ${(pricing.vintage_entries||0).toLocaleString()} vintages`;
   document.getElementById('cov-bar').style.width = pricing.vivino_coverage_pct + '%';
   document.getElementById('kpi-countries').textContent = Object.keys(s.countries).length;
 
