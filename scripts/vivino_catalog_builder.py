@@ -416,16 +416,17 @@ _EXTRACT_CATALOG_JS = """
         const vivino_id = idMatch ? (idMatch[1] || idMatch[2]) : null;
         if (!vivino_id) continue;
 
-        // Optional price
+        // Optional price — match any currency symbol ($, €, £, etc.)
         let price = null;
         for (const line of lines) {
-            const pm = line.match(/^\\$([\\d,]+(?:\\.\\d{1,2})?)$/);
+            const pm = line.match(/^[\\$€£¥]([\\d,]+(?:\\.\\d{1,2})?)$/) ||
+                       line.match(/^([\\d,]+(?:\\.\\d{1,2})?)\\s*[\\$€£¥]$/);
             if (pm) { price = parseFloat(pm[1].replace(/,/g, '')); break; }
         }
         if (!price) {
             const parent = link.closest('div, li, article') || link.parentElement;
             if (parent) {
-                const pm = (parent.innerText || '').match(/\\$([\\d,]+(?:\\.\\d{1,2})?)/);
+                const pm = (parent.innerText || '').match(/[\\$€£¥]([\\d,]+(?:\\.\\d{1,2})?)/);
                 if (pm) price = parseFloat(pm[1].replace(/,/g, ''));
             }
         }
