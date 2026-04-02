@@ -74,7 +74,7 @@ _OUTPUT_PATH = Path(__file__).parent.parent / "app" / "data" / "extended_catalog
 MIN_DELAY = 3.5
 MAX_DELAY = 6.0
 USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "Mozilla/5.0 (X11; Linux x86_64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/122.0.0.0 Safari/537.36"
 )
@@ -569,7 +569,10 @@ async def main(args: argparse.Namespace) -> None:
     total_added = 0
 
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=True)
+        browser = await pw.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage"],
+        )
         context = await browser.new_context(
             user_agent=USER_AGENT,
             locale="en-US",

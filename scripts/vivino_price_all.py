@@ -61,7 +61,7 @@ log = logging.getLogger("vivino_price")
 MIN_DELAY = 3.0   # seconds between searches per tab
 MAX_DELAY = 5.5
 USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "Mozilla/5.0 (X11; Linux x86_64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/122.0.0.0 Safari/537.36"
 )
@@ -184,7 +184,10 @@ async def main(args: argparse.Namespace) -> None:
     start = time.monotonic()
 
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=True)
+        browser = await pw.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage"],
+        )
         context = await browser.new_context(
             user_agent=USER_AGENT,
             locale="en-US",

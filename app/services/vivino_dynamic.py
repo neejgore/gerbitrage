@@ -77,15 +77,19 @@ async def _run_lookup(
     logger.info("Dynamic Vivino lookup: '%s %s' (id=%s)", producer, wine_name, wine_id)
 
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=True)
+        browser = await pw.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage"],
+        )
         context = await browser.new_context(
             user_agent=(
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "Mozilla/5.0 (X11; Linux x86_64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
                 "Chrome/122.0.0.0 Safari/537.36"
             ),
             locale="en-US",
             timezone_id="America/Los_Angeles",
+            viewport={"width": 1280, "height": 900},
         )
         page = await context.new_page()
 
