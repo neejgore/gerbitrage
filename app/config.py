@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     # Flip to False once any real credential is set
     use_mock_pricing: bool = True
 
+    # Set to False when a background worker is already running Playwright
+    # scraping in the same container — avoids two browsers competing for RAM.
+    vivino_live_search: bool = True
+
     # Identification confidence thresholds
     high_confidence_threshold: float = 0.85
     medium_confidence_threshold: float = 0.65

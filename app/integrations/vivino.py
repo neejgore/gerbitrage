@@ -217,10 +217,11 @@ class VivinoProvider(BasePricingProvider):
             keys_to_check.append(f"{base_id}-{vintage}")
         keys_to_check.append(base_id)
 
-        # 1. Disk cache hit — instant
+        # 1. Disk cache hit — instant (reload from file to pick up worker writes)
+        current_cache = _load_price_cache()
         for key in keys_to_check:
-            if key in _price_cache:
-                entry = _price_cache[key]
+            if key in current_cache:
+                entry = current_cache[key]
                 logger.debug("Vivino cache hit: %s", key)
                 return RawPricingResult(
                     source=self.name,
@@ -232,29 +233,35 @@ class VivinoProvider(BasePricingProvider):
                     url=entry.get("url"),
                 )
 
-        # 2. Live search — search Vivino right now with vintage in query if known
-        logger.info(
-            "Vivino cache miss → live search: '%s %s' vintage=%s",
-            producer[:30], wine_name[:30], vintage,
-        )
-        catalog_entry = WINE_CATALOG_BY_ID.get(base_id) if wine_id else None
-        catalog_price = catalog_entry.avg_retail_price if catalog_entry else None
+        # 2. Live search — only when no background worker is running
+        # On Railway, the background worker handles all scraping so we skip
+        # live searches to avoid two Playwright browsers competing for RAM.
+        if settings.vivino_live_search:
+            logger.info(
+                "Vivino cache miss → live search: '%s %s' vintage=%s",
+                producer[:30], wine_name[:30], vintage,
+            )
+            catalog_entry = WINE_CATALOG_BY_ID.get(base_id) if wine_id else None
+            catalog_price = catalog_entry.avg_retail_price if catalog_entry else None
 
-        result = await _vivino_browser.search(wine_name, producer, vintage, catalog_price)
+            result = await _vivino_browser.search(wine_name, producer, vintage, catalog_price)
 
-        if result:
-            # Store under vintage-specific key when we have one, so the next
-            # lookup for "Margaux 2018" is an instant cache hit
-            store_key = f"{base_id}-{vintage}" if vintage else base_id
-            update_price_cache(store_key, result)
-            return RawPricingResult(
-                source=self.name,
-                avg_price=result.get("avg_price"),
-                min_price=result.get("min_price"),
-                max_price=result.get("max_price"),
-                median_price=result.get("median_price"),
-                num_listings=result.get("num_listings"),
-                url=result.get("url"),
+            if result:
+                store_key = f"{base_id}-{vintage}" if vintage else base_id
+                update_price_cache(store_key, result)
+                return RawPricingResult(
+                    source=self.name,
+                    avg_price=result.get("avg_price"),
+                    min_price=result.get("min_price"),
+                    max_price=result.get("max_price"),
+                    median_price=result.get("median_price"),
+                    num_listings=result.get("num_listings"),
+                    url=result.get("url"),
+                )
+        else:
+            logger.debug(
+                "Vivino cache miss for '%s' (live search disabled — worker handles it)",
+                base_id,
             )
 
         return None
