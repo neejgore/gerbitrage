@@ -549,8 +549,13 @@ function renderResults(wines) {
 }
 
 // ── Wine detail ────────────────────────────────────────────────────────────
-async function selectWine(wineId, cardEl) {
-  // Highlight selected card
+let _selectedWineId = null;
+let _selectedCardEl = null;
+
+async function selectWine(wineId, cardEl, vintage) {
+  _selectedWineId = wineId;
+  _selectedCardEl = cardEl;
+
   document.querySelectorAll('.wine-card').forEach(c => c.classList.remove('selected'));
   cardEl.classList.add('selected');
 
@@ -558,10 +563,12 @@ async function selectWine(wineId, cardEl) {
   panel.classList.add('visible');
   panel.innerHTML = '<div class="loading-row"><div class="spinner"></div> Loading pricing…</div>';
 
+  const vintageParam = vintage ? `?vintage=${vintage}` : '';
+
   try {
     const [wineRes, pricingRes] = await Promise.all([
       fetch(`${API}/search?q=${encodeURIComponent(wineId)}&limit=1`),
-      fetch(`${API}/wine/${wineId}/pricing`),
+      fetch(`${API}/wine/${wineId}/pricing${vintageParam}`),
     ]);
 
     const searchData = await wineRes.json();
@@ -589,13 +596,24 @@ async function selectWine(wineId, cardEl) {
       </div>
     `).join('') || '<div style="color:var(--muted);font-size:12px">No provider data yet</div>';
 
+    const currentYear = new Date().getFullYear();
+    const vintageOptions = ['<option value="">No vintage</option>'];
+    for (let y = currentYear - 1; y >= 2010; y--) {
+      const sel = (vintage && vintage == y) ? 'selected' : '';
+      vintageOptions.push(`<option value="${y}" ${sel}>${y}</option>`);
+    }
+
     panel.innerHTML = `
       <div class="detail-header">
         <div>
           <div class="detail-name">${wine.name}</div>
           <div class="detail-producer">${wine.producer}</div>
         </div>
-        <div style="display:flex;gap:8px;align-items:center">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select id="vintage-select" onchange="selectWine('${wine.id}', _selectedCardEl, this.value || null)"
+            style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:13px;cursor:pointer">
+            ${vintageOptions.join('')}
+          </select>
           <span class="tag tag-type-${wine.wine_type}">${wine.wine_type}</span>
           <span class="tag tag-tier">${wine.price_tier}</span>
           <span style="font-size:11px;color:${confColor};background:${confColor}22;padding:3px 10px;border-radius:10px;font-weight:600">${confidence} confidence</span>
