@@ -102,7 +102,13 @@ async def _safe_fetch(
     wine_id: str,
 ) -> Optional[RawPricingResult]:
     try:
-        return await provider.fetch_pricing(wine_name, producer, vintage, wine_id)
+        return await asyncio.wait_for(
+            provider.fetch_pricing(wine_name, producer, vintage, wine_id),
+            timeout=8.0,
+        )
+    except asyncio.TimeoutError:
+        logger.debug("Provider %s timed out", provider.name)
+        return None
     except Exception as exc:
         logger.warning("Provider %s failed: %s", provider.name, exc)
         return None
