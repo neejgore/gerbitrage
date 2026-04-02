@@ -26,6 +26,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 import unicodedata
 from pathlib import Path
 from typing import Optional
@@ -71,6 +72,10 @@ def reload_price_cache() -> None:
 
 # Load on import
 _price_cache.update(_load_price_cache())
+
+# Throttle disk reloads — Railway volumes are network-mounted (slow)
+_RELOAD_INTERVAL = 30.0   # seconds between full disk reloads
+_last_reload: float = time.monotonic()
 
 
 # ---------------------------------------------------------------------------
@@ -217,11 +222,12 @@ class VivinoProvider(BasePricingProvider):
             keys_to_check.append(f"{base_id}-{vintage}")
         keys_to_check.append(base_id)
 
-        # 1. Disk cache hit — instant (reload from file to pick up worker writes)
-        current_cache = _load_price_cache()
+        # 1. In-memory cache hit — instant
+        # On a miss we do one lazy reload from disk to pick up entries written
+        # by the background worker process since this process started.
         for key in keys_to_check:
-            if key in current_cache:
-                entry = current_cache[key]
+            if key in _price_cache:
+                entry = _price_cache[key]
                 logger.debug("Vivino cache hit: %s", key)
                 return RawPricingResult(
                     source=self.name,
@@ -232,6 +238,29 @@ class VivinoProvider(BasePricingProvider):
                     num_listings=entry.get("num_listings"),
                     url=entry.get("url"),
                 )
+
+        # Lazy reload: worker writes new entries to disk; pull them into memory.
+        # Throttled to once every 30s so Railway's network volume isn't hammered.
+        global _last_reload
+        now = time.monotonic()
+        if now - _last_reload >= _RELOAD_INTERVAL:
+            fresh = _load_price_cache()
+            if len(fresh) > len(_price_cache):
+                _price_cache.update(fresh)
+                logger.debug("Vivino cache reloaded: %d entries", len(_price_cache))
+            _last_reload = now
+            for key in keys_to_check:
+                if key in _price_cache:
+                    entry = _price_cache[key]
+                    return RawPricingResult(
+                        source=self.name,
+                        avg_price=entry.get("avg_price"),
+                        min_price=entry.get("min_price"),
+                        max_price=entry.get("max_price"),
+                        median_price=entry.get("median_price"),
+                        num_listings=entry.get("num_listings"),
+                        url=entry.get("url"),
+                    )
 
         # 2. Live search — only when no background worker is running
         # On Railway, the background worker handles all scraping so we skip
