@@ -68,15 +68,30 @@ def get_stats() -> dict:
     wine_types["rosé"] = wine_types.pop("rose", 0) + wine_types.pop("rosé", 0)
 
     # Vivino pricing coverage
-    vivino_priced: set[str] = set()
+    vivino_cache_keys: set[str] = set()
     if _VIVINO_CACHE.exists():
         try:
-            vivino_priced = set(json.loads(_VIVINO_CACHE.read_text()).keys())
+            vivino_cache_keys = set(json.loads(_VIVINO_CACHE.read_text()).keys())
         except Exception:
             pass
 
+    base_ids = set(WINE_CATALOG_BY_ID.keys())
     total_base = len(WINE_CATALOG)
-    priced = len(vivino_priced & set(WINE_CATALOG_BY_ID.keys()))
+
+    # Generic priced = base wine has a non-vintage cache entry
+    priced = len(vivino_cache_keys & base_ids)
+
+    # Vintage entries = keys like "chateau-margaux-2018"
+    vintage_entries = len([
+        k for k in vivino_cache_keys
+        if len(k) > 4 and k[-4:].isdigit() and k[:-5] in base_ids
+    ])
+
+    # A wine is "covered" if it has either a generic OR at least one vintage entry
+    base_ids_with_vintage = {k[:-5] for k in vivino_cache_keys if len(k) > 4 and k[-4:].isdigit()}
+    covered = len((vivino_cache_keys & base_ids) | (base_ids_with_vintage & base_ids))
+
+    vivino_priced = vivino_cache_keys  # keep for per-country coverage below
 
     # Extended catalog
     extended_count = 0
@@ -90,7 +105,7 @@ def get_stats() -> dict:
     country_coverage: dict[str, dict] = {}
     for country, count in countries.items():
         c_ids = {w.id for w in WINE_CATALOG if w.country == country}
-        c_priced = len(c_ids & vivino_priced)
+        c_priced = len(c_ids & vivino_cache_keys)
         country_coverage[country] = {
             "total": count,
             "priced": c_priced,
@@ -111,8 +126,11 @@ def get_stats() -> dict:
         },
         "pricing": {
             "vivino_priced": priced,
-            "vivino_coverage_pct": round(100 * priced / total_base) if total_base else 0,
-            "unpriced": total_base - priced,
+            "vintage_entries": vintage_entries,
+            "total_cache_entries": len(vivino_cache_keys),
+            "wines_covered": covered,
+            "vivino_coverage_pct": round(100 * covered / total_base) if total_base else 0,
+            "unpriced": total_base - covered,
         },
         "countries": countries,
         "country_coverage": country_coverage,
