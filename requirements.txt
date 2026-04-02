@@ -1,0 +1,17 @@
+fastapi==0.115.5
+playwright>=1.49.0
+uvicorn[standard]==0.32.1
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+redis[asyncio]==5.2.1
+pydantic==2.10.3
+pydantic-settings==2.7.0
+httpx==0.28.1
+rapidfuzz==3.11.0
+jellyfish==1.1.0
+unicodedata2==15.1.0
+python-dotenv==1.0.1
+structlog==24.4.0
+python-multipart==0.0.20
+apscheduler>=3.10

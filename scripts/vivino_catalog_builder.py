@@ -1,0 +1,650 @@
+#!/usr/bin/env python3
+"""
+Vivino Catalog Builder
+======================
+Expands the wine catalog beyond the 694 hand-curated entries by scraping
+Vivino's search / explore pages for each major wine region and style.
+
+Output: app/data/extended_catalog.json
+  {
+    "slug-id": {
+      "id": "slug-id",
+      "name": "...",
+      "producer": "...",
+      "region": "...",
+      "country": "...",
+      "varietal": "...",
+      "wine_type": "red|white|rose|sparkling|dessert",
+      "avg_retail_price": 89.0,
+      "price_tier": "premium",
+      "vivino_wine_id": "12345",
+      "vivino_url": "https://www.vivino.com/wines/12345",
+      "vivino_rating": 4.2,
+      "vivino_ratings_count": 15000,
+      "discovered_at": "2026-04-01T12:00:00Z"
+    },
+    ...
+  }
+
+Estimated runtime: ~3-4 hours to build 10k+ entries.
+
+Usage
+-----
+  python scripts/vivino_catalog_builder.py              # full build
+  python scripts/vivino_catalog_builder.py --max 200    # quick test (200 per region)
+  python scripts/vivino_catalog_builder.py --resume     # skip already-discovered wines
+  python scripts/vivino_catalog_builder.py --regions bordeaux burgundy  # specific regions
+
+Requirements
+------------
+  pip install playwright
+  playwright install chromium
+"""
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import logging
+import random
+import re
+import sys
+import time
+import unicodedata
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from app.data.wine_catalog import WINE_CATALOG_BY_ID
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(levelname)-7s  %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger("vivino_catalog")
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+_OUTPUT_PATH = Path(__file__).parent.parent / "app" / "data" / "extended_catalog.json"
+
+# ── Constants ─────────────────────────────────────────────────────────────────
+MIN_DELAY = 3.5
+MAX_DELAY = 6.0
+USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/122.0.0.0 Safari/537.36"
+)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Region / query definitions
+# Each entry: (region_key, search_queries, country, region_label, wine_type)
+# Multiple queries per region target different sub-appellations/styles.
+# ──────────────────────────────────────────────────────────────────────────────
+REGION_QUERIES = [
+    # ── Bordeaux ──────────────────────────────────────────────────────────────
+    # Use appellation names that Vivino wines are literally named after
+    ("bordeaux-left-bank",  ["Pauillac", "Margaux", "Saint-Julien",
+                              "Pessac-Léognan", "Saint-Estèphe"],
+     "France", "Bordeaux", "red"),
+    ("bordeaux-right-bank", ["Pomerol", "Saint-Émilion Grand Cru", "Fronsac"],
+     "France", "Bordeaux", "red"),
+    ("bordeaux-white",      ["Bordeaux Blanc", "Pessac-Léognan Blanc", "Entre-Deux-Mers"],
+     "France", "Bordeaux", "white"),
+    ("sauternes",           ["Sauternes", "Barsac"],
+     "France", "Sauternes", "dessert"),
+
+    # ── Burgundy ──────────────────────────────────────────────────────────────
+    ("burgundy-red",        ["Gevrey-Chambertin", "Vosne-Romanée", "Chambolle-Musigny",
+                              "Nuits-Saint-Georges", "Beaune", "Volnay"],
+     "France", "Burgundy", "red"),
+    ("burgundy-white",      ["Meursault", "Puligny-Montrachet", "Chassagne-Montrachet",
+                              "Chablis Grand Cru", "Corton-Charlemagne"],
+     "France", "Burgundy", "white"),
+    ("burgundy-villages",   ["Bourgogne Pinot Noir", "Bourgogne Chardonnay",
+                              "Mâcon-Villages", "Pouilly-Fuissé"],
+     "France", "Burgundy", "red"),
+
+    # ── Champagne ─────────────────────────────────────────────────────────────
+    ("champagne",           ["Champagne Blanc de Blancs", "Champagne Prestige",
+                              "Champagne Brut", "Champagne Rosé"],
+     "France", "Champagne", "sparkling"),
+
+    # ── Rhône ─────────────────────────────────────────────────────────────────
+    ("rhone-north",         ["Hermitage", "Côte-Rôtie", "Crozes-Hermitage",
+                              "Cornas", "Saint-Joseph"],
+     "France", "Rhône", "red"),
+    ("rhone-south",         ["Châteauneuf-du-Pape", "Gigondas", "Vacqueyras",
+                              "Côtes du Rhône Villages"],
+     "France", "Rhône", "red"),
+
+    # ── Loire ─────────────────────────────────────────────────────────────────
+    ("loire",               ["Sancerre", "Pouilly-Fumé", "Vouvray",
+                              "Muscadet", "Chinon", "Bourgueil"],
+     "France", "Loire Valley", "white"),
+
+    # ── Alsace ────────────────────────────────────────────────────────────────
+    ("alsace",              ["Alsace Riesling Grand Cru", "Alsace Gewurztraminer",
+                              "Alsace Pinot Gris"],
+     "France", "Alsace", "white"),
+
+    # ── Other France ──────────────────────────────────────────────────────────
+    ("france-other",        ["Bandol", "Provence Rosé", "Roussillon",
+                              "Languedoc"],
+     "France", "South of France", "red"),
+
+    # ── Napa Valley ───────────────────────────────────────────────────────────
+    # Use well-known producer/wine names that Vivino actually indexes
+    ("napa-cabernet",       ["Opus One", "Screaming Eagle", "Harlan Estate",
+                              "Stag's Leap Wine Cellars", "Caymus Cabernet",
+                              "Silver Oak Napa", "Jordan Cabernet"],
+     "USA", "Napa Valley", "red"),
+    ("napa-chardonnay",     ["Rombauer Chardonnay", "Far Niente Chardonnay",
+                              "Stony Hill Chardonnay", "Sonoma Cutrer"],
+     "USA", "Napa Valley", "white"),
+    ("napa-other",          ["Duckhorn Merlot", "Cakebread Merlot",
+                              "Turley Zinfandel", "Ridge Zinfandel"],
+     "USA", "Napa Valley", "red"),
+
+    # ── Sonoma ────────────────────────────────────────────────────────────────
+    ("sonoma",              ["Williams Selyem Pinot Noir", "Kosta Browne Pinot Noir",
+                              "Paul Hobbs Cabernet", "Dry Creek Zinfandel",
+                              "Flowers Chardonnay"],
+     "USA", "Sonoma", "red"),
+
+    # ── Oregon ────────────────────────────────────────────────────────────────
+    ("oregon",              ["Domaine Drouhin Pinot Noir", "Adelsheim Pinot Noir",
+                              "Ponzi Pinot Gris", "Eyrie Pinot Noir"],
+     "USA", "Oregon", "red"),
+
+    # ── Washington ────────────────────────────────────────────────────────────
+    ("washington",          ["Leonetti Cabernet", "Quilceda Creek Cabernet",
+                              "L'Ecole No 41", "Andrew Will Syrah"],
+     "USA", "Washington", "red"),
+
+    # ── Other USA ─────────────────────────────────────────────────────────────
+    ("usa-other",           ["Justin Cabernet Paso Robles", "Sea Smoke Pinot Noir",
+                              "Au Bon Climat Chardonnay", "Dr. Konstantin Frank Riesling"],
+     "USA", "California / USA", "red"),
+
+    # ── Tuscany ───────────────────────────────────────────────────────────────
+    ("tuscany-brunello",    ["Brunello di Montalcino", "Rosso di Montalcino"],
+     "Italy", "Tuscany", "red"),
+    ("tuscany-chianti",     ["Chianti Classico Gran Selezione", "Chianti Classico Riserva",
+                              "Chianti Classico"],
+     "Italy", "Tuscany", "red"),
+    ("tuscany-supertuscan", ["Bolgheri Sassicaia", "Tignanello", "Super Tuscan IGT",
+                              "Bolgheri Superiore"],
+     "Italy", "Tuscany", "red"),
+
+    # ── Piedmont ──────────────────────────────────────────────────────────────
+    ("piedmont-barolo",     ["Barolo Riserva", "Barolo", "Barolo Vigna"],
+     "Italy", "Piedmont", "red"),
+    ("piedmont-barb",       ["Barbaresco", "Barbera d'Asti Superiore",
+                              "Dolcetto d'Alba"],
+     "Italy", "Piedmont", "red"),
+
+    # ── Other Italy ───────────────────────────────────────────────────────────
+    ("italy-other",         ["Amarone della Valpolicella", "Ripasso Valpolicella",
+                              "Sagrantino di Montefalco", "Taurasi red",
+                              "Etna Rosso", "Nero d'Avola"],
+     "Italy", "Italy", "red"),
+
+    # ── Spain ─────────────────────────────────────────────────────────────────
+    ("rioja",               ["Rioja Gran Reserva", "Rioja Reserva", "Rioja Alta"],
+     "Spain", "Rioja", "red"),
+    ("spain-other",         ["Ribera del Duero Reserva", "Priorat red",
+                              "Bierzo Mencía", "Rías Baixas Albariño",
+                              "Rueda Verdejo"],
+     "Spain", "Spain", "red"),
+
+    # ── Germany ───────────────────────────────────────────────────────────────
+    ("germany",             ["Mosel Riesling Spätlese", "Mosel Riesling Auslese",
+                              "Rheingau Riesling Spätlese", "Pfalz Riesling"],
+     "Germany", "Germany", "white"),
+
+    # ── Austria ───────────────────────────────────────────────────────────────
+    ("austria",             ["Wachau Riesling Smaragd", "Grüner Veltliner Smaragd",
+                              "Burgenland Blaufränkisch"],
+     "Austria", "Austria", "white"),
+
+    # ── Argentina ─────────────────────────────────────────────────────────────
+    ("argentina",           ["Mendoza Malbec", "Luján de Cuyo Malbec",
+                              "Uco Valley Malbec", "Mendoza Cabernet Sauvignon"],
+     "Argentina", "Mendoza", "red"),
+
+    # ── Chile ─────────────────────────────────────────────────────────────────
+    ("chile",               ["Maipo Cabernet Sauvignon", "Colchagua Carménère",
+                              "Casablanca Chardonnay", "Aconcagua Cabernet"],
+     "Chile", "Chile", "red"),
+
+    # ── Australia ─────────────────────────────────────────────────────────────
+    ("australia",           ["Barossa Valley Shiraz", "McLaren Vale Shiraz",
+                              "Clare Valley Riesling", "Coonawarra Cabernet",
+                              "Yarra Valley Pinot Noir", "Eden Valley Riesling"],
+     "Australia", "Australia", "red"),
+
+    # ── New Zealand ───────────────────────────────────────────────────────────
+    ("new-zealand",         ["Marlborough Sauvignon Blanc", "Central Otago Pinot Noir",
+                              "Hawke's Bay Syrah"],
+     "New Zealand", "New Zealand", "white"),
+
+    # ── South Africa ──────────────────────────────────────────────────────────
+    ("south-africa",        ["Stellenbosch Cabernet Sauvignon", "Swartland Syrah",
+                              "Hemel-en-Aarde Pinot Noir"],
+     "South Africa", "South Africa", "red"),
+
+    # ── Portugal ──────────────────────────────────────────────────────────────
+    ("portugal",            ["Quinta do Crasto Douro", "Niepoort Douro",
+                              "Vinho Verde", "Dao", "Alentejo"],
+     "Portugal", "Portugal", "red"),
+
+    # ── Port & Sherry ─────────────────────────────────────────────────────────
+    ("fortified",           ["Vintage Port", "Graham's Port", "Taylor Fladgate Port",
+                              "Amontillado Sherry", "Oloroso Sherry"],
+     "Portugal", "Douro / Jerez", "fortified"),
+]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Parsing helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _slugify(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9]+", "-", text)
+    return text.strip("-")
+
+
+def _parse_explore_page(html: str, region_label: str, country: str, wine_type: str) -> list[dict]:
+    """
+    Parse Vivino search results HTML and return a list of wine dicts.
+
+    Vivino's SSR HTML (when Playwright renders it) includes:
+      - JSON-LD ItemList / Product blocks
+      - Inline data patterns in rendered text
+    """
+    import json as _json
+
+    wines: list[dict] = []
+    now = datetime.now(timezone.utc).isoformat()
+
+    # --- JSON-LD ---
+    ld_blocks = re.findall(
+        r'<script[^>]+type="application/ld\+json"[^>]*>(.*?)</script>',
+        html,
+        re.DOTALL | re.IGNORECASE,
+    )
+    for block in ld_blocks:
+        try:
+            data = _json.loads(block)
+        except Exception:
+            continue
+
+        items = []
+        if isinstance(data, dict) and data.get("@type") == "ItemList":
+            items = data.get("itemListElement", [])
+        elif isinstance(data, dict) and data.get("@type") in ("Product", "Wine"):
+            items = [data]
+        elif isinstance(data, list):
+            items = data
+
+        for item in items:
+            name = (item.get("name") or "").strip()
+            url = item.get("url") or item.get("@id") or ""
+            offers = item.get("offers") or {}
+            if isinstance(offers, list):
+                offers = offers[0] if offers else {}
+            price = offers.get("price") or offers.get("lowPrice")
+            rating_agg = item.get("aggregateRating") or {}
+            rating = rating_agg.get("ratingValue")
+            rating_count = rating_agg.get("reviewCount") or rating_agg.get("ratingCount")
+
+            # Extract vivino wine ID from URL
+            vivino_id = ""
+            m = re.search(r"/wines/(\d+)", url)
+            if m:
+                vivino_id = m.group(1)
+
+            # Extract vintage from name
+            vintage_match = re.search(r"\b(19|20)\d{2}\b", name)
+            vintage = int(vintage_match.group()) if vintage_match else None
+
+            # Split producer from wine name (Vivino usually shows "Producer Name")
+            producer = _extract_producer_heuristic(name, region_label)
+
+            try:
+                avg_price = float(price) if price else None
+            except (ValueError, TypeError):
+                avg_price = None
+
+            try:
+                rating_val = float(rating) if rating else None
+                rating_cnt = int(rating_count) if rating_count else None
+            except (ValueError, TypeError):
+                rating_val = None
+                rating_cnt = None
+
+            if not name or not vivino_id:
+                continue
+
+            slug_id = _slugify(f"{producer} {name} {vivino_id}")
+
+            wines.append({
+                "id": slug_id,
+                "name": name,
+                "producer": producer,
+                "region": region_label,
+                "country": country,
+                "appellation": region_label,
+                "varietal": "",       # filled in by caller when possible
+                "wine_type": wine_type,
+                "avg_retail_price": avg_price or 0.0,
+                "price_tier": _price_tier(avg_price or 0.0),
+                "vivino_wine_id": vivino_id,
+                "vivino_url": url,
+                "vivino_rating": rating_val,
+                "vivino_ratings_count": rating_cnt,
+                "vintage": vintage,
+                "discovered_at": now,
+            })
+
+    return wines
+
+
+def _extract_producer_heuristic(full_name: str, region: str) -> str:
+    """
+    Best-effort: extract producer name from a full Vivino wine title.
+    e.g. "Domaine de la Romanée-Conti La Tâche 2019" → "Domaine de la Romanée-Conti"
+    """
+    # Remove vintage
+    clean = re.sub(r"\b(19|20)\d{2}\b", "", full_name).strip()
+    # Take first 1-3 meaningful tokens (up to ~25 chars)
+    words = clean.split()
+    # If starts with common producer prefixes, take 3 words; otherwise 2
+    prefixes = {"domaine", "château", "chateau", "maison", "cave", "weingut",
+                "bodegas", "tenuta", "azienda", "estate", "winery", "vineyards"}
+    n = 3 if (words and words[0].lower() in prefixes) else 2
+    return " ".join(words[:min(n, len(words))]).strip()
+
+
+def _price_tier(price: float) -> str:
+    if price <= 25:
+        return "budget"
+    if price <= 75:
+        return "mid"
+    if price <= 200:
+        return "premium"
+    if price <= 600:
+        return "luxury"
+    return "ultra"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Main scraping loop
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ---------------------------------------------------------------------------
+# JavaScript injected into the rendered Vivino search page.
+# Collects all wine card anchors — with OR without a price — so we get
+# the full catalog metadata even when price info isn't shown.
+# ---------------------------------------------------------------------------
+_EXTRACT_CATALOG_JS = """
+() => {
+    const results = [];
+    const seen = new Set();
+
+    const links = Array.from(document.querySelectorAll('a[href*="/wines/"], a[href*="/w/"]'));
+    for (const link of links) {
+        const url = link.href;
+        if (!url || seen.has(url)) continue;
+        const text = link.innerText.trim();
+        if (!text || text.length < 3) continue;
+        seen.add(url);
+
+        const lines = text.split('\\n').map(l => l.trim()).filter(Boolean);
+        const name = lines[0] || '';
+        if (!name) continue;
+
+        // Vivino URL contains the numeric wine ID
+        const idMatch = url.match(/\\/wines\\/(\\d+)|\\/w\\/(\\d+)/);
+        const vivino_id = idMatch ? (idMatch[1] || idMatch[2]) : null;
+        if (!vivino_id) continue;
+
+        // Optional price
+        let price = null;
+        for (const line of lines) {
+            const pm = line.match(/^\\$([\\d,]+(?:\\.\\d{1,2})?)$/);
+            if (pm) { price = parseFloat(pm[1].replace(/,/g, '')); break; }
+        }
+        if (!price) {
+            const parent = link.closest('div, li, article') || link.parentElement;
+            if (parent) {
+                const pm = (parent.innerText || '').match(/\\$([\\d,]+(?:\\.\\d{1,2})?)/);
+                if (pm) price = parseFloat(pm[1].replace(/,/g, ''));
+            }
+        }
+
+        // Optional rating
+        let rating = null;
+        for (const line of lines) {
+            const r = parseFloat(line);
+            if (r >= 1.0 && r <= 5.0 && /^[1-4]\\.[0-9]$/.test(line.trim())) {
+                rating = r; break;
+            }
+        }
+
+        results.push({ name, url, vivino_id, price, rating });
+    }
+    return results;
+}
+"""
+
+
+async def scrape_region(
+    page,
+    region_key: str,
+    queries: list[str],
+    country: str,
+    region_label: str,
+    wine_type: str,
+    max_per_region: int,
+    existing_ids: set[str],
+) -> list[dict]:
+    """Scrape Vivino for one region definition and return discovered wines."""
+    now = datetime.now(timezone.utc).isoformat()
+    wines: list[dict] = []
+    seen_vivino_ids: set[str] = set()
+
+    for query in queries:
+        if len(wines) >= max_per_region:
+            break
+
+        # Paginate up to 4 pages per query (~25 results/page)
+        for page_num in range(1, 5):
+            if len(wines) >= max_per_region:
+                break
+
+            url = (
+                f"https://www.vivino.com/search/wines"
+                f"?q={query.replace(' ', '+')}"
+                f"&page={page_num}"
+            )
+            log.info("  → %s  (page %d)", query[:60], page_num)
+
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+                # Wait for JS to render the wine cards
+                await page.wait_for_timeout(2500)
+
+                cards = await page.evaluate(_EXTRACT_CATALOG_JS)
+                if not cards:
+                    log.info("    page %d: no cards found (JS rendered nothing)", page_num)
+                    break
+
+                new_batch: list[dict] = []
+                for card in cards:
+                    vid = card.get("vivino_id") or ""
+                    if not vid or vid in seen_vivino_ids:
+                        continue
+                    avg_price = card.get("price") or 0.0
+                    slug_id = _slugify(f"{card['name']} {vid}")
+                    if slug_id in existing_ids:
+                        continue
+                    producer = _extract_producer_heuristic(card["name"], region_label)
+                    seen_vivino_ids.add(vid)
+                    new_batch.append({
+                        "id": slug_id,
+                        "name": card["name"],
+                        "producer": producer,
+                        "region": region_label,
+                        "country": country,
+                        "appellation": region_label,
+                        "varietal": "",
+                        "wine_type": wine_type,
+                        "avg_retail_price": avg_price,
+                        "price_tier": _price_tier(avg_price),
+                        "vivino_wine_id": vid,
+                        "vivino_url": card["url"],
+                        "vivino_rating": card.get("rating"),
+                        "vivino_ratings_count": None,
+                        "vintage": None,
+                        "discovered_at": now,
+                    })
+
+                wines.extend(new_batch)
+                log.info(
+                    "    page %d: +%d new / %d total for region",
+                    page_num, len(new_batch), len(wines),
+                )
+
+                if not new_batch:
+                    break  # no new results on this page → stop paginating
+
+            except Exception as exc:
+                log.warning("  Error on '%s' page %d: %s", query, page_num, exc)
+                break
+
+            await asyncio.sleep(random.uniform(MIN_DELAY, MAX_DELAY))
+
+    return wines[:max_per_region]
+
+
+async def main(args: argparse.Namespace) -> None:
+    from playwright.async_api import async_playwright
+
+    # Load existing extended catalog
+    catalog: dict[str, dict] = {}
+    if _OUTPUT_PATH.exists():
+        try:
+            catalog = json.loads(_OUTPUT_PATH.read_text())
+            log.info("Loaded %d existing extended catalog entries", len(catalog))
+        except Exception as exc:
+            log.warning("Could not load existing catalog: %s", exc)
+
+    # Existing IDs (both base catalog and extended catalog)
+    existing_ids = set(WINE_CATALOG_BY_ID.keys()) | set(catalog.keys())
+
+    # Filter regions if --regions specified
+    regions_to_process = REGION_QUERIES
+    if args.regions:
+        wanted = set(args.regions)
+        regions_to_process = [r for r in REGION_QUERIES if r[0] in wanted]
+        if not regions_to_process:
+            log.error("No matching regions found. Available: %s",
+                      [r[0] for r in REGION_QUERIES])
+            return
+
+    log.info(
+        "Building extended catalog: %d region definitions, max %d per region",
+        len(regions_to_process), args.max,
+    )
+
+    start = time.monotonic()
+    total_added = 0
+
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        context = await browser.new_context(
+            user_agent=USER_AGENT,
+            locale="en-US",
+            timezone_id="America/Los_Angeles",
+            viewport={"width": 1280, "height": 900},
+        )
+        page = await context.new_page()
+        await page.route(
+            "**/*.{png,jpg,gif,webp,svg,woff,woff2,ttf}",
+            lambda r: r.abort(),
+        )
+
+        for region_key, queries, country, region_label, wine_type in regions_to_process:
+            log.info(
+                "\n[%s] Scraping %d queries...", region_key, len(queries),
+            )
+
+            if args.resume:
+                region_existing = sum(
+                    1 for v in catalog.values() if v.get("region") == region_label
+                )
+                if region_existing >= args.max:
+                    log.info("  → already have %d wines, skipping", region_existing)
+                    continue
+
+            wines = await scrape_region(
+                page, region_key, queries, country, region_label, wine_type,
+                args.max, existing_ids,
+            )
+
+            for w in wines:
+                catalog[w["id"]] = w
+                existing_ids.add(w["id"])
+
+            total_added += len(wines)
+            log.info("  [%s] Added %d wines (catalog total: %d)", region_key, len(wines), len(catalog))
+
+            # Save after every region in case of interruption
+            _OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _OUTPUT_PATH.write_text(json.dumps(catalog, indent=2, sort_keys=True))
+
+        await browser.close()
+
+    elapsed = time.monotonic() - start
+    log.info(
+        "\n"
+        "═══════════════════════════════════════\n"
+        "  Catalog build complete\n"
+        "  New wines added:  %d\n"
+        "  Total in catalog: %d\n"
+        "  Runtime:          %.1f min\n"
+        "═══════════════════════════════════════",
+        total_added, len(catalog), elapsed / 60,
+    )
+    log.info("Saved to %s", _OUTPUT_PATH)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Expand wine catalog by scraping Vivino by region"
+    )
+    parser.add_argument(
+        "--max", type=int, default=300, metavar="N",
+        help="Max wines to add per region definition (default 300)",
+    )
+    parser.add_argument(
+        "--resume", action="store_true",
+        help="Skip regions that already have enough entries in the catalog",
+    )
+    parser.add_argument(
+        "--regions", nargs="+", metavar="REGION_KEY",
+        help="Only scrape specific region keys (e.g. bordeaux-left-bank napa-cabernet)",
+    )
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    asyncio.run(main(parse_args()))

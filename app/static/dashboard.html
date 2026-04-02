@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gerbitrage — Wine Intelligence Dashboard</title>
+
+  <!-- Leaflet for the map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:       #0f0f13;
+      --surface:  #18181f;
+      --card:     #1e1e28;
+      --border:   #2a2a38;
+      --accent:   #7c6af7;
+      --accent2:  #e87d3e;
+      --green:    #3ecf8e;
+      --red:      #e85d5d;
+      --text:     #e8e8f0;
+      --muted:    #6e6e8a;
+      --radius:   12px;
+      font-family: 'Inter', 'SF Pro Display', system-ui, sans-serif;
+    }
+    html, body { height: 100%; background: var(--bg); color: var(--text); }
+
+    /* ── Layout ───────────────────────────────────────────────────────── */
+    .page { display: flex; flex-direction: column; min-height: 100vh; }
+
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 28px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+    .logo span { color: var(--accent); }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 12px; border-radius: 20px;
+      font-size: 12px; font-weight: 600;
+      background: rgba(124,106,247,.15); color: var(--accent);
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    main { flex: 1; padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
+
+    /* ── KPI row ──────────────────────────────────────────────────────── */
+    .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    .kpi {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px 20px;
+    }
+    .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; }
+    .kpi-value { font-size: 30px; font-weight: 700; line-height: 1; }
+    .kpi-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .kpi-value.green { color: var(--green); }
+    .kpi-value.accent { color: var(--accent); }
+
+    /* ── Grid: map + charts ───────────────────────────────────────────── */
+    .main-grid { display: grid; grid-template-columns: 1fr 380px; gap: 20px; align-items: start; }
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+    }
+    .card-header {
+      padding: 16px 20px 0; display: flex; align-items: center;
+      justify-content: space-between;
+    }
+    .card-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+    .card-body { padding: 16px 20px; }
+
+    /* ── Map ──────────────────────────────────────────────────────────── */
+    #map { height: 420px; width: 100%; background: #12121a; }
+    /* Override Leaflet defaults for dark theme */
+    .leaflet-container { background: #12121a !important; }
+    .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.85); }
+    .map-tooltip {
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--text); padding: 8px 12px; border-radius: 8px;
+      font-size: 12px; font-weight: 500; pointer-events: none;
+    }
+
+    /* ── Charts ───────────────────────────────────────────────────────── */
+    .chart-stack { display: flex; flex-direction: column; gap: 14px; }
+    .chart-wrap { position: relative; height: 160px; }
+
+    /* ── Region list ─────────────────────────────────────────────────── */
+    .region-list { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+    .region-row {
+      display: flex; align-items: center; gap: 10px; font-size: 12px;
+    }
+    .region-name { flex: 1; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .region-bar-wrap { width: 100px; height: 5px; background: var(--border); border-radius: 3px; flex-shrink: 0; }
+    .region-bar { height: 100%; border-radius: 3px; background: var(--accent); }
+    .region-count { width: 24px; text-align: right; color: var(--muted); }
+
+    /* ── Search section ──────────────────────────────────────────────── */
+    .search-section { display: flex; flex-direction: column; gap: 14px; }
+    .search-row { display: flex; gap: 10px; }
+    .search-input {
+      flex: 1; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); border-radius: 8px;
+      padding: 10px 14px; font-size: 14px; outline: none;
+      transition: border-color .2s;
+    }
+    .search-input:focus { border-color: var(--accent); }
+    .search-input::placeholder { color: var(--muted); }
+    .btn {
+      padding: 10px 20px; border-radius: 8px; font-size: 13px;
+      font-weight: 600; cursor: pointer; border: none;
+      background: var(--accent); color: #fff; transition: opacity .15s;
+    }
+    .btn:hover { opacity: .85; }
+    .btn-sm { padding: 6px 14px; font-size: 12px; }
+    .btn-ghost {
+      background: transparent; border: 1px solid var(--border); color: var(--muted);
+    }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Results grid ─────────────────────────────────────────────────── */
+    .results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 900px) { .results-grid { grid-template-columns: 1fr; } }
+
+    /* ── Wine card (search result) ───────────────────────────────────── */
+    .wine-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 16px; cursor: pointer;
+      transition: border-color .15s, transform .1s;
+    }
+    .wine-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .wine-card.selected { border-color: var(--accent); background: rgba(124,106,247,.08); }
+    .wine-card-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+    .wine-card-producer { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+    .wine-card-meta { display: flex; gap: 6px; flex-wrap: wrap; }
+    .tag {
+      display: inline-block; padding: 2px 8px; border-radius: 12px;
+      font-size: 11px; font-weight: 500; border: 1px solid var(--border);
+    }
+    .tag-type-red    { color: #e87d7d; border-color: #e87d7d33; background: #e87d7d11; }
+    .tag-type-white  { color: #f0d97e; border-color: #f0d97e33; background: #f0d97e11; }
+    .tag-type-sparkling { color: #a8d4f0; border-color: #a8d4f033; background: #a8d4f011; }
+    .tag-type-rosé, .tag-type-rose { color: #f0a8c4; border-color: #f0a8c433; background: #f0a8c411; }
+    .tag-type-dessert { color: #c4a8f0; border-color: #c4a8f033; background: #c4a8f011; }
+    .tag-type-fortified { color: #d4a870; border-color: #d4a87033; background: #d4a87011; }
+    .tag-type-orange { color: #e8a870; border-color: #e8a87033; background: #e8a87011; }
+    .tag-tier { color: var(--muted); }
+    .price-tag { margin-left: auto; font-size: 15px; font-weight: 700; color: var(--green); }
+
+    /* ── Detail panel ────────────────────────────────────────────────── */
+    .detail-panel {
+      background: var(--card); border: 1px solid var(--accent);
+      border-radius: var(--radius); padding: 20px; display: none;
+    }
+    .detail-panel.visible { display: block; }
+    .detail-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+    .detail-name { font-size: 20px; font-weight: 700; }
+    .detail-producer { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .detail-stat { background: var(--surface); border-radius: 8px; padding: 12px 14px; }
+    .detail-stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 4px; }
+    .detail-stat-value { font-size: 20px; font-weight: 700; }
+    .detail-stat-value.green { color: var(--green); }
+    .detail-stat-value.accent2 { color: var(--accent2); }
+    .detail-meta-row { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 12px; color: var(--muted); }
+    .detail-meta-row span { color: var(--text); }
+    .price-sources { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 14px; }
+    .price-sources-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; }
+    .source-row { display: flex; align-items: center; gap: 10px; font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+    .source-row:last-child { border-bottom: none; }
+    .source-name { flex: 1; color: var(--muted); }
+    .source-price { font-weight: 600; color: var(--text); }
+    .source-range { color: var(--muted); font-size: 11px; }
+
+    /* ── Loading / empty states ──────────────────────────────────────── */
+    .empty { text-align: center; color: var(--muted); padding: 32px 20px; font-size: 13px; }
+    .spinner {
+      display: inline-block; width: 16px; height: 16px;
+      border: 2px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-row { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 32px; color: var(--muted); font-size: 13px; }
+
+    /* ── Coverage bar ────────────────────────────────────────────────── */
+    .cov-bar-wrap { height: 6px; background: var(--border); border-radius: 3px; margin-top: 8px; }
+    .cov-bar { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--green), var(--accent)); transition: width .8s ease; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">ger<span>bitrage</span></div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div class="pill"><div class="dot"></div> Live</div>
+      <span style="font-size:12px;color:var(--muted)" id="last-updated">Loading…</span>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- KPI row -->
+    <div class="kpi-row">
+      <div class="kpi">
+        <div class="kpi-label">Total Wines</div>
+        <div class="kpi-value accent" id="kpi-total">—</div>
+        <div class="kpi-sub" id="kpi-extended"></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Priced (Vivino)</div>
+        <div class="kpi-value green" id="kpi-priced">—</div>
+        <div class="kpi-sub" id="kpi-priced-sub"></div>
+        <div class="cov-bar-wrap"><div class="cov-bar" id="cov-bar" style="width:0%"></div></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Countries</div>
+        <div class="kpi-value" id="kpi-countries">—</div>
+        <div class="kpi-sub">wine regions</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Avg Retail Price</div>
+        <div class="kpi-value" id="kpi-avg-price">—</div>
+        <div class="kpi-sub">catalog base</div>
+      </div>
+    </div>
+
+    <!-- Map + charts -->
+    <div class="main-grid">
+
+      <!-- Map -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Catalog coverage by country</span>
+          <span style="font-size:11px;color:var(--muted)">circle = wine count</span>
+        </div>
+        <div id="map"></div>
+      </div>
+
+      <!-- Charts column -->
+      <div class="chart-stack">
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">Wine type</span></div>
+          <div class="card-body"><div class="chart-wrap"><canvas id="chart-type"></canvas></div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">Price tier</span></div>
+          <div class="card-body"><div class="chart-wrap"><canvas id="chart-tier"></canvas></div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">Top regions</span></div>
+          <div class="card-body">
+            <div class="region-list" id="region-list"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Wine lookup -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">Wine Lookup</span></div>
+      <div class="card-body">
+        <div class="search-section">
+
+          <div class="search-row">
+            <input class="search-input" id="search-input"
+              placeholder="Search by name, producer, region… e.g. Opus One, Chateau Margaux, Barolo"
+              autocomplete="off" />
+            <button class="btn" onclick="doSearch()">Search</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearSearch()">Clear</button>
+          </div>
+
+          <!-- Search results -->
+          <div id="search-results">
+            <div class="empty">Type a wine name above to look it up</div>
+          </div>
+
+          <!-- Detail panel -->
+          <div class="detail-panel" id="detail-panel"></div>
+
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+const API = '';  // same origin — change to 'http://localhost:8000' if opening as file
+
+// ── Country centroids (lat, lng) ───────────────────────────────────────────
+const CENTROIDS = {
+  'France':        [46.2,   2.2],
+  'Italy':         [41.9,  12.6],
+  'USA':           [37.1, -95.7],
+  'Spain':         [40.5,  -3.7],
+  'Germany':       [51.2,  10.5],
+  'Australia':     [-25.3,133.8],
+  'Austria':       [47.5,  14.6],
+  'Portugal':      [39.4,  -8.2],
+  'New Zealand':   [-40.9,174.9],
+  'Chile':         [-35.7, -71.5],
+  'South Africa':  [-28.5,  24.8],
+  'Argentina':     [-34.6, -58.4],
+  'Greece':        [39.1,  22.0],
+  'Hungary':       [47.2,  19.5],
+  'Lebanon':       [33.9,  35.5],
+  'Georgia':       [42.3,  43.4],
+  'Croatia':       [45.1,  15.2],
+  'Slovenia':      [46.1,  14.8],
+  'Israel':        [31.5,  34.8],
+  'Switzerland':   [46.8,   8.2],
+  'Canada':        [56.1, -106.3],
+  'Uruguay':       [-32.5, -55.8],
+};
+
+// ── Chart defaults ─────────────────────────────────────────────────────────
+Chart.defaults.color = '#6e6e8a';
+Chart.defaults.borderColor = '#2a2a38';
+Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+
+let typeChart, tierChart, leafletMap;
+let allStats = null;
+
+// ── Load stats ─────────────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const res = await fetch(`${API}/admin/stats`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    allStats = await res.json();
+    renderStats(allStats);
+    document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  } catch (e) {
+    console.error('Stats load failed:', e);
+    document.getElementById('last-updated').textContent = '⚠ API not reachable';
+  }
+}
+
+function renderStats(s) {
+  const cat = s.catalog;
+  const pricing = s.pricing;
+
+  // KPIs
+  document.getElementById('kpi-total').textContent = cat.base_wines.toLocaleString();
+  document.getElementById('kpi-extended').textContent =
+    cat.extended_wines > 0 ? `+${cat.extended_wines.toLocaleString()} extended` : 'Extended catalog building…';
+  document.getElementById('kpi-priced').textContent = pricing.vivino_priced.toLocaleString();
+  document.getElementById('kpi-priced-sub').textContent = `${pricing.vivino_coverage_pct}% coverage`;
+  document.getElementById('cov-bar').style.width = pricing.vivino_coverage_pct + '%';
+  document.getElementById('kpi-countries').textContent = Object.keys(s.countries).length;
+
+  const prices = Object.values(s.avg_price_by_country);
+  const overall = prices.reduce((a, b) => a + b, 0) / prices.length;
+  document.getElementById('kpi-avg-price').textContent = '$' + Math.round(overall);
+
+  // Map
+  renderMap(s);
+
+  // Type chart
+  const typeLabels = Object.keys(s.wine_types);
+  const typeData = Object.values(s.wine_types);
+  const typeColors = {
+    red: '#e87d7d', white: '#f0d97e', sparkling: '#a8d4f0',
+    'rosé': '#f0a8c4', rose: '#f0a8c4', dessert: '#c4a8f0',
+    fortified: '#d4a870', orange: '#e8a870',
+  };
+  if (typeChart) typeChart.destroy();
+  typeChart = new Chart(document.getElementById('chart-type'), {
+    type: 'doughnut',
+    data: {
+      labels: typeLabels,
+      datasets: [{
+        data: typeData,
+        backgroundColor: typeLabels.map(t => typeColors[t] || '#6e6e8a'),
+        borderWidth: 1,
+        borderColor: '#1e1e28',
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      cutout: '62%',
+      plugins: {
+        legend: { position: 'right', labels: { boxWidth: 10, padding: 10, font: {size: 11} } }
+      }
+    }
+  });
+
+  // Tier chart
+  const tierOrder = ['budget','mid','premium','luxury','ultra'];
+  const tierColors = ['#3ecf8e','#7c6af7','#e87d3e','#e85d5d','#c4a8f0'];
+  const tierLabels = tierOrder.filter(t => s.price_tiers[t]);
+  const tierData = tierLabels.map(t => s.price_tiers[t]);
+  if (tierChart) tierChart.destroy();
+  tierChart = new Chart(document.getElementById('chart-tier'), {
+    type: 'bar',
+    data: {
+      labels: tierLabels.map(t => t.charAt(0).toUpperCase() + t.slice(1)),
+      datasets: [{
+        data: tierData,
+        backgroundColor: tierLabels.map((t,i) => tierColors[tierOrder.indexOf(t)]),
+        borderRadius: 6,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { grid: { color: '#2a2a38' }, ticks: { stepSize: 50 } }
+      }
+    }
+  });
+
+  // Top regions list
+  const regionList = document.getElementById('region-list');
+  regionList.innerHTML = '';
+  const maxCount = Math.max(...Object.values(s.top_regions));
+  Object.entries(s.top_regions).slice(0, 12).forEach(([region, count]) => {
+    const pct = Math.round(100 * count / maxCount);
+    regionList.innerHTML += `
+      <div class="region-row">
+        <span class="region-name">${region}</span>
+        <div class="region-bar-wrap"><div class="region-bar" style="width:${pct}%"></div></div>
+        <span class="region-count">${count}</span>
+      </div>`;
+  });
+}
+
+// ── Leaflet map ────────────────────────────────────────────────────────────
+function renderMap(s) {
+  if (!leafletMap) {
+    leafletMap = L.map('map', {
+      center: [30, 10], zoom: 2,
+      zoomControl: true, attributionControl: false,
+    });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 10,
+    }).addTo(leafletMap);
+  } else {
+    leafletMap.eachLayer(l => { if (l instanceof L.CircleMarker) leafletMap.removeLayer(l); });
+  }
+
+  const counts = s.countries;
+  const coverage = s.country_coverage;
+  const avgPrices = s.avg_price_by_country;
+  const maxCount = Math.max(...Object.values(counts));
+
+  Object.entries(counts).forEach(([country, count]) => {
+    const coords = CENTROIDS[country];
+    if (!coords) return;
+
+    const pct = coverage[country]?.pct ?? 0;
+    const avgPrice = avgPrices[country] ?? 0;
+    const radius = 8 + 28 * Math.sqrt(count / maxCount);
+
+    // Color: green if well priced, purple if sparse
+    const hue = pct > 70 ? '#3ecf8e' : pct > 40 ? '#7c6af7' : '#e85d5d';
+
+    const circle = L.circleMarker(coords, {
+      radius,
+      fillColor: hue,
+      color: '#000',
+      weight: 1,
+      opacity: 0.5,
+      fillOpacity: 0.7,
+    }).addTo(leafletMap);
+
+    circle.bindTooltip(`
+      <div class="map-tooltip">
+        <strong>${country}</strong><br>
+        ${count} wines · ${pct}% priced<br>
+        Avg retail $${avgPrice}
+      </div>
+    `, { className: '', sticky: true });
+  });
+}
+
+// ── Wine search ────────────────────────────────────────────────────────────
+let searchDebounce;
+document.getElementById('search-input').addEventListener('input', (e) => {
+  clearTimeout(searchDebounce);
+  if (e.target.value.length < 2) return;
+  searchDebounce = setTimeout(() => doSearch(), 400);
+});
+document.getElementById('search-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { clearTimeout(searchDebounce); doSearch(); }
+});
+
+async function doSearch() {
+  const q = document.getElementById('search-input').value.trim();
+  if (q.length < 2) return;
+
+  const container = document.getElementById('search-results');
+  container.innerHTML = '<div class="loading-row"><div class="spinner"></div> Searching…</div>';
+
+  try {
+    const res = await fetch(`${API}/search?q=${encodeURIComponent(q)}&limit=8`);
+    const data = await res.json();
+    renderResults(data.results || []);
+  } catch (e) {
+    container.innerHTML = `<div class="empty">⚠ Could not reach API</div>`;
+  }
+}
+
+function clearSearch() {
+  document.getElementById('search-input').value = '';
+  document.getElementById('search-results').innerHTML = '<div class="empty">Type a wine name above to look it up</div>';
+  document.getElementById('detail-panel').classList.remove('visible');
+}
+
+function renderResults(wines) {
+  const container = document.getElementById('search-results');
+  if (!wines.length) {
+    container.innerHTML = '<div class="empty">No wines found</div>';
+    return;
+  }
+
+  container.innerHTML = `<div class="results-grid">
+    ${wines.map(w => `
+      <div class="wine-card" onclick="selectWine('${w.id}', this)">
+        <div class="wine-card-name">${w.name}</div>
+        <div class="wine-card-producer">${w.producer}</div>
+        <div class="wine-card-meta">
+          <span class="tag tag-type-${w.wine_type}">${w.wine_type}</span>
+          <span class="tag tag-tier">${w.price_tier}</span>
+          <span class="tag">${w.country}</span>
+          <span class="price-tag">$${w.avg_retail_price.toLocaleString()}</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px">${w.region}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">${w.varietal}</div>
+      </div>
+    `).join('')}
+  </div>`;
+}
+
+// ── Wine detail ────────────────────────────────────────────────────────────
+async function selectWine(wineId, cardEl) {
+  // Highlight selected card
+  document.querySelectorAll('.wine-card').forEach(c => c.classList.remove('selected'));
+  cardEl.classList.add('selected');
+
+  const panel = document.getElementById('detail-panel');
+  panel.classList.add('visible');
+  panel.innerHTML = '<div class="loading-row"><div class="spinner"></div> Loading pricing…</div>';
+
+  try {
+    const [wineRes, pricingRes] = await Promise.all([
+      fetch(`${API}/search?q=${encodeURIComponent(wineId)}&limit=1`),
+      fetch(`${API}/wine/${wineId}/pricing`),
+    ]);
+
+    const searchData = await wineRes.json();
+    const pricingData = await pricingRes.json();
+    const wine = searchData.results?.[0];
+    const pricing = pricingData.pricing;
+
+    if (!wine || !pricing) { panel.innerHTML = '<div class="empty">Data unavailable</div>'; return; }
+
+    const confidence = pricing.data_confidence;
+    const confColor = confidence === 'high' ? '#3ecf8e' : confidence === 'medium' ? '#e87d3e' : '#6e6e8a';
+    const wholesale = pricing.estimated_wholesale;
+    const avgRetail = pricing.avg_retail;
+    const multiplier = wholesale ? (avgRetail / wholesale).toFixed(1) : '—';
+
+    const sourcesHtml = (pricing.sources || []).map(src => `
+      <div class="source-row">
+        <span class="source-name">${src.name}</span>
+        <span class="source-price">${src.avg_price ? '$' + src.avg_price.toLocaleString() : '—'}</span>
+        <span class="source-range">
+          ${src.min_price && src.max_price ? `$${src.min_price} – $${src.max_price}` : ''}
+          ${src.num_listings ? `· ${src.num_listings} listings` : ''}
+        </span>
+        ${src.url ? `<a href="${src.url}" target="_blank" style="color:var(--accent);font-size:11px;">↗</a>` : ''}
+      </div>
+    `).join('') || '<div style="color:var(--muted);font-size:12px">No provider data yet</div>';
+
+    panel.innerHTML = `
+      <div class="detail-header">
+        <div>
+          <div class="detail-name">${wine.name}</div>
+          <div class="detail-producer">${wine.producer}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="tag tag-type-${wine.wine_type}">${wine.wine_type}</span>
+          <span class="tag tag-tier">${wine.price_tier}</span>
+          <span style="font-size:11px;color:${confColor};background:${confColor}22;padding:3px 10px;border-radius:10px;font-weight:600">${confidence} confidence</span>
+        </div>
+      </div>
+
+      <div class="detail-grid">
+        <div class="detail-stat">
+          <div class="detail-stat-label">Avg Retail</div>
+          <div class="detail-stat-value green">$${avgRetail ? avgRetail.toLocaleString() : '—'}</div>
+        </div>
+        <div class="detail-stat">
+          <div class="detail-stat-label">Est. Wholesale</div>
+          <div class="detail-stat-value accent2">$${wholesale ? wholesale.toLocaleString() : '—'}</div>
+        </div>
+        <div class="detail-stat">
+          <div class="detail-stat-label">Retail / Wholesale</div>
+          <div class="detail-stat-value">${multiplier}×</div>
+        </div>
+      </div>
+
+      <div class="detail-meta-row">
+        <div>Region <span>${wine.region}</span></div>
+        <div>Country <span>${wine.country}</span></div>
+        <div>Appellation <span>${wine.appellation || '—'}</span></div>
+        <div>Varietal <span>${wine.varietal || '—'}</span></div>
+        ${pricing.min_retail ? `<div>Price range <span>$${pricing.min_retail} – $${pricing.max_retail}</span></div>` : ''}
+      </div>
+
+      <div class="price-sources">
+        <div class="price-sources-title">Price sources</div>
+        ${sourcesHtml}
+      </div>
+    `;
+  } catch (e) {
+    panel.innerHTML = `<div class="empty">⚠ ${e.message}</div>`;
+  }
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+loadStats();
+// Refresh stats every 30s while page is open (catches pricing job updates)
+setInterval(loadStats, 30_000);
+</script>
+</body>
+</html>
