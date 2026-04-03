@@ -108,9 +108,11 @@ REGION_QUERIES = [
                               "Mâcon-Villages", "Pouilly-Fuissé"],
      "France", "Burgundy", "red"),
 
-    # ── Champagne ─────────────────────────────────────────────────────────────
-    ("champagne",           ["Champagne Blanc de Blancs", "Champagne Prestige",
-                              "Champagne Brut", "Champagne Rosé"],
+    # ── Champagne – by style (surfaces all grower/NM Champagnes) ─────────────
+    ("champagne",           ["Champagne Blanc de Blancs", "Champagne Blanc de Noirs",
+                              "Champagne Brut Nature", "Champagne Extra Brut",
+                              "Champagne Brut", "Champagne Rosé",
+                              "Champagne Premier Cru", "Champagne Grand Cru"],
      "France", "Champagne", "sparkling"),
 
     # ── Rhône ─────────────────────────────────────────────────────────────────
@@ -136,62 +138,85 @@ REGION_QUERIES = [
                               "Languedoc"],
      "France", "South of France", "red"),
 
-    # ── Napa Valley ───────────────────────────────────────────────────────────
-    # Use well-known producer/wine names that Vivino actually indexes
-    ("napa-cabernet",       ["Opus One", "Screaming Eagle", "Harlan Estate",
-                              "Stag's Leap Wine Cellars", "Caymus Cabernet",
-                              "Silver Oak Napa", "Jordan Cabernet"],
+    # ── Napa Valley – by sub-appellation (surfaces all producers in each AVA) ──
+    ("napa-oakville",       ["Oakville Cabernet Sauvignon", "Rutherford Cabernet Sauvignon",
+                              "Yountville Cabernet Sauvignon", "Stags Leap District Cabernet"],
      "USA", "Napa Valley", "red"),
-    ("napa-chardonnay",     ["Rombauer Chardonnay", "Far Niente Chardonnay",
-                              "Stony Hill Chardonnay", "Sonoma Cutrer"],
+    ("napa-mountain",       ["Howell Mountain Cabernet", "Spring Mountain District",
+                              "Mount Veeder Cabernet", "Diamond Mountain Cabernet",
+                              "Atlas Peak Cabernet"],
+     "USA", "Napa Valley", "red"),
+    ("napa-broad",          ["Napa Valley Cabernet Sauvignon", "Napa Valley Merlot",
+                              "Napa Valley Zinfandel", "Napa Valley Syrah",
+                              "Napa Valley Petit Verdot"],
+     "USA", "Napa Valley", "red"),
+    ("napa-white",          ["Napa Valley Chardonnay", "Napa Valley Sauvignon Blanc",
+                              "Carneros Chardonnay", "Carneros Pinot Noir",
+                              "Napa Valley Pinot Noir"],
      "USA", "Napa Valley", "white"),
-    ("napa-other",          ["Duckhorn Merlot", "Cakebread Merlot",
-                              "Turley Zinfandel", "Ridge Zinfandel"],
-     "USA", "Napa Valley", "red"),
 
-    # ── Sonoma ────────────────────────────────────────────────────────────────
-    ("sonoma",              ["Williams Selyem Pinot Noir", "Kosta Browne Pinot Noir",
-                              "Paul Hobbs Cabernet", "Dry Creek Zinfandel",
-                              "Flowers Chardonnay"],
+    # ── Sonoma – by sub-appellation ───────────────────────────────────────────
+    ("sonoma-pinot",        ["Russian River Valley Pinot Noir", "Sonoma Coast Pinot Noir",
+                              "Green Valley Pinot Noir", "Petaluma Gap Pinot Noir"],
+     "USA", "Sonoma", "red"),
+    ("sonoma-cab",          ["Alexander Valley Cabernet Sauvignon", "Chalk Hill Chardonnay",
+                              "Sonoma Coast Chardonnay", "Dry Creek Valley Zinfandel",
+                              "Knights Valley Cabernet"],
      "USA", "Sonoma", "red"),
 
-    # ── Oregon ────────────────────────────────────────────────────────────────
-    ("oregon",              ["Domaine Drouhin Pinot Noir", "Adelsheim Pinot Noir",
-                              "Ponzi Pinot Gris", "Eyrie Pinot Noir"],
+    # ── Oregon – by sub-appellation ───────────────────────────────────────────
+    ("oregon",              ["Willamette Valley Pinot Noir", "Dundee Hills Pinot Noir",
+                              "Chehalem Mountains Pinot Noir", "Ribbon Ridge Pinot Noir",
+                              "Eola-Amity Hills Pinot Noir", "McMinnville Pinot Noir"],
      "USA", "Oregon", "red"),
 
-    # ── Washington ────────────────────────────────────────────────────────────
-    ("washington",          ["Leonetti Cabernet", "Quilceda Creek Cabernet",
-                              "L'Ecole No 41", "Andrew Will Syrah"],
+    # ── Washington – by sub-appellation ──────────────────────────────────────
+    ("washington",          ["Columbia Valley Cabernet Sauvignon", "Walla Walla Cabernet",
+                              "Red Mountain Cabernet Sauvignon", "Columbia Gorge Pinot Gris",
+                              "Yakima Valley Riesling", "Horse Heaven Hills Cabernet"],
      "USA", "Washington", "red"),
 
-    # ── Other USA ─────────────────────────────────────────────────────────────
-    ("usa-other",           ["Justin Cabernet Paso Robles", "Sea Smoke Pinot Noir",
-                              "Au Bon Climat Chardonnay", "Dr. Konstantin Frank Riesling"],
+    # ── Other USA – by appellation ────────────────────────────────────────────
+    ("usa-other",           ["Paso Robles Cabernet Sauvignon", "Sta. Rita Hills Pinot Noir",
+                              "Santa Barbara County Chardonnay", "Finger Lakes Riesling",
+                              "Monterey Pinot Noir", "Santa Cruz Mountains Cabernet"],
      "USA", "California / USA", "red"),
 
-    # ── Tuscany ───────────────────────────────────────────────────────────────
-    ("tuscany-brunello",    ["Brunello di Montalcino", "Rosso di Montalcino"],
+    # ── Tuscany – by appellation (surfaces all producers) ────────────────────
+    ("tuscany-brunello",    ["Brunello di Montalcino", "Rosso di Montalcino",
+                              "Vino Nobile di Montepulciano"],
      "Italy", "Tuscany", "red"),
     ("tuscany-chianti",     ["Chianti Classico Gran Selezione", "Chianti Classico Riserva",
-                              "Chianti Classico"],
+                              "Chianti Classico", "Chianti Rufina", "Chianti Colli Senesi"],
      "Italy", "Tuscany", "red"),
-    ("tuscany-supertuscan", ["Bolgheri Sassicaia", "Tignanello", "Super Tuscan IGT",
-                              "Bolgheri Superiore"],
+    ("tuscany-bolgheri",    ["Bolgheri Rosso", "Bolgheri Superiore",
+                              "Maremma Toscana Cabernet", "Morellino di Scansano",
+                              "Montecucco Sangiovese", "Val di Cornia Rosso"],
      "Italy", "Tuscany", "red"),
+    ("tuscany-white",       ["Vernaccia di San Gimignano", "Bolgheri Bianco",
+                              "Vermentino Toscana", "Ansonica Costa dell'Argentario"],
+     "Italy", "Tuscany", "white"),
 
-    # ── Piedmont ──────────────────────────────────────────────────────────────
-    ("piedmont-barolo",     ["Barolo Riserva", "Barolo", "Barolo Vigna"],
+    # ── Piedmont – by appellation ─────────────────────────────────────────────
+    ("piedmont-barolo",     ["Barolo DOCG", "Barolo Riserva", "Barolo Serralunga",
+                              "Barolo La Morra", "Barolo Castiglione Falletto"],
      "Italy", "Piedmont", "red"),
-    ("piedmont-barb",       ["Barbaresco", "Barbera d'Asti Superiore",
-                              "Dolcetto d'Alba"],
+    ("piedmont-barbaresco", ["Barbaresco DOCG", "Barbaresco Riserva",
+                              "Barbaresco Treiso", "Barbaresco Neive"],
+     "Italy", "Piedmont", "red"),
+    ("piedmont-other",      ["Barbera d'Asti Superiore", "Barbera d'Alba",
+                              "Dolcetto d'Alba", "Langhe Nebbiolo",
+                              "Roero Riserva", "Nizza Barbera"],
      "Italy", "Piedmont", "red"),
 
-    # ── Other Italy ───────────────────────────────────────────────────────────
-    ("italy-other",         ["Amarone della Valpolicella", "Ripasso Valpolicella",
-                              "Sagrantino di Montefalco", "Taurasi red",
-                              "Etna Rosso", "Nero d'Avola"],
-     "Italy", "Italy", "red"),
+    # ── Other Italy – by appellation ──────────────────────────────────────────
+    ("veneto-red",          ["Amarone della Valpolicella", "Amarone Classico",
+                              "Ripasso Valpolicella Superiore", "Valpolicella Classico"],
+     "Italy", "Veneto", "red"),
+    ("italy-south-red",     ["Taurasi DOCG", "Sagrantino di Montefalco",
+                              "Etna Rosso DOC", "Cerasuolo di Vittoria",
+                              "Primitivo di Manduria"],
+     "Italy", "Southern Italy", "red"),
 
     # ── Spain ─────────────────────────────────────────────────────────────────
     ("rioja",               ["Rioja Gran Reserva", "Rioja Reserva", "Rioja Alta"],
