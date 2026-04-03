@@ -436,6 +436,153 @@ REGION_QUERIES = [
     ("new-zealand-more",    ["Martinborough Pinot Noir", "Waipara Riesling",
                               "Gisborne Chardonnay", "Hawke's Bay Merlot"],
      "New Zealand", "New Zealand", "red"),
+
+    # ── France – Southwest ────────────────────────────────────────────────────
+    ("france-southwest",    ["Cahors Malbec", "Madiran Tannat", "Jurançon Sec",
+                              "Jurançon Moelleux", "Gaillac Rouge", "Bergerac Rouge",
+                              "Irouléguy Rouge", "Marcillac"],
+     "France", "Southwest France", "red"),
+
+    # ── France – Savoy & Bugey ────────────────────────────────────────────────
+    ("france-savoie",       ["Roussette de Savoie", "Mondeuse Savoie",
+                              "Apremont", "Chignin Bergeron", "Bugey Cerdon"],
+     "France", "Savoie", "white"),
+
+    # ── Italy – Piedmont extras ───────────────────────────────────────────────
+    ("piedmont-more",       ["Gavi di Gavi", "Roero Arneis", "Barbera d'Asti Superiore",
+                              "Moscato d'Asti", "Langhe Nebbiolo", "Dolcetto d'Alba"],
+     "Italy", "Piedmont", "white"),
+
+    # ── Italy – Lombardy ──────────────────────────────────────────────────────
+    ("lombardy",            ["Franciacorta Brut", "Franciacorta Satèn",
+                              "Valtellina Superiore", "Sforzato di Valtellina",
+                              "Lugana Riserva", "Oltrepò Pavese Pinot Nero"],
+     "Italy", "Lombardy", "sparkling"),
+
+    # ── Italy – Lazio & Liguria ───────────────────────────────────────────────
+    ("lazio-liguria",       ["Frascati Superiore", "Cesanese del Piglio",
+                              "Rossese di Dolceacqua", "Cinque Terre Bianco",
+                              "Vermentino Liguria"],
+     "Italy", "Central Italy", "white"),
+
+    # ── Italy – Calabria & Valle d'Aosta ─────────────────────────────────────
+    ("calabria-aosta",      ["Cirò Rosso Classico", "Greco di Bianco",
+                              "Donnas Valle d'Aosta", "Enfer d'Arvier"],
+     "Italy", "Southern Italy", "red"),
+
+    # ── Spain – Txakoli & Canary Islands ─────────────────────────────────────
+    ("spain-basque-canary", ["Txakoli Getariako", "Txakoli Bizkaiko",
+                              "Listán Negro Tenerife", "Malvasía Lanzarote",
+                              "Marmajuelo Canary Islands"],
+     "Spain", "Spain", "white"),
+
+    # ── Spain – Valencia & Castilla ───────────────────────────────────────────
+    ("spain-inland",        ["Valencia Bobal", "Utiel-Requena Bobal",
+                              "La Mancha Tempranillo", "Valdepeñas Reserva",
+                              "Ribera del Guadiana"],
+     "Spain", "Spain", "red"),
+
+    # ── Portugal – more ───────────────────────────────────────────────────────
+    ("portugal-more",       ["Bairrada Baga", "Baga Bairrada",
+                              "Dão Touriga Nacional", "Setúbal Moscatel",
+                              "Lisboa Tejo", "Alentejo Aragonez"],
+     "Portugal", "Portugal", "red"),
+
+    # ── Madeira ───────────────────────────────────────────────────────────────
+    ("madeira",             ["Madeira Sercial", "Madeira Verdelho",
+                              "Madeira Bual", "Madeira Malmsey",
+                              "Blandy's Madeira", "Henriques Henriques Madeira"],
+     "Portugal", "Madeira", "fortified"),
+
+    # ── Germany – Ahr & more ──────────────────────────────────────────────────
+    ("germany-ahr",         ["Ahr Spätburgunder", "Ahr Pinot Noir",
+                              "Mittelrhein Riesling", "Mosel Grosses Gewächs"],
+     "Germany", "Germany", "red"),
+
+    # ── Austria – more regions ────────────────────────────────────────────────
+    ("austria-more",        ["Kamptal Riesling Lamm", "Kremstal Grüner Veltliner",
+                              "Steiermark Sauvignon Blanc", "Wiener Gemischter Satz",
+                              "Neusiedlersee Trockenbeerenauslese",
+                              "Leithaberg Blaufränkisch"],
+     "Austria", "Austria", "white"),
+
+    # ── Switzerland ───────────────────────────────────────────────────────────
+    ("switzerland",         ["Chasselas Lavaux", "Fendant Valais",
+                              "Dôle Valais", "Pinot Noir Graubünden",
+                              "Cornalin Valais", "Humagne Rouge"],
+     "Switzerland", "Switzerland", "white"),
+
+    # ── England ───────────────────────────────────────────────────────────────
+    ("england",             ["Nyetimber Classic Cuvée", "Ridgeview Bloomsbury",
+                              "Chapel Down Brut", "Camel Valley Brut",
+                              "Hambledon Classic Cuvée"],
+     "United Kingdom", "England", "sparkling"),
+
+    # ── Uruguay ───────────────────────────────────────────────────────────────
+    ("uruguay",             ["Tannat Uruguay", "Bouza Tannat",
+                              "Pisano Tannat", "Carrau Tannat",
+                              "Viña Varela Zarranz Tannat"],
+     "Uruguay", "Uruguay", "red"),
+
+    # ── Brazil ────────────────────────────────────────────────────────────────
+    ("brazil",              ["Miolo Cuvée Giuseppe", "Casa Valduga Merlot",
+                              "Pizzato Merlot Serra Gaúcha", "Don Guerino Syrah",
+                              "Salton Talento"],
+     "Brazil", "Brazil", "red"),
+
+    # ── Mexico ────────────────────────────────────────────────────────────────
+    ("mexico",              ["LA Cetto Nebbiolo Baja", "Monte Xanic Cabernet",
+                              "Château Camou Baja", "Mogor Badan",
+                              "Vena Cava Baja California"],
+     "Mexico", "Baja California", "red"),
+
+    # ── Turkey ────────────────────────────────────────────────────────────────
+    ("turkey",              ["Kalecik Karası Ankara", "Öküzgözü Elazığ",
+                              "Boğazkere Diyarbakır", "Kavaklidere Prestige",
+                              "Doluca Özel Rezerv"],
+     "Turkey", "Turkey", "red"),
+
+    # ── Lebanon – more ────────────────────────────────────────────────────────
+    ("lebanon-more",        ["Château Musar Rouge", "Château Musar Blanc",
+                              "Massaya Classic", "Ksara Réserve du Couvent",
+                              "Château Kefraya Comtes de M"],
+     "Lebanon", "Lebanon", "red"),
+
+    # ── China ─────────────────────────────────────────────────────────────────
+    ("china",               ["Grace Vineyard Tasya's Reserve", "Château Changyu Cabernet",
+                              "Silver Heights Ningxia", "Pernod Ricard Helan Mountain",
+                              "Ao Yun Yunnan"],
+     "China", "China", "red"),
+
+    # ── India ─────────────────────────────────────────────────────────────────
+    ("india",               ["Sula Rasa Shiraz", "Grover Zampa La Réserve",
+                              "York Winery Cabernet", "Fratelli Sette",
+                              "KRSMA Sangiovese"],
+     "India", "India", "red"),
+
+    # ── Romania & Bulgaria ────────────────────────────────────────────────────
+    ("eastern-europe",      ["Fetească Neagră Dealu Mare", "Cramele Recaș Wines",
+                              "Melnik 55 Damianitza", "Mavrud Asenovgrad",
+                              "Bessa Valley Enira", "Chateau Copsa"],
+     "Romania", "Eastern Europe", "red"),
+
+    # ── Tasmania ──────────────────────────────────────────────────────────────
+    ("tasmania",            ["Jansz Tasmania Sparkling", "Devil's Corner Pinot Noir",
+                              "Domaine A Cabernet", "Josef Chromy Riesling",
+                              "Freycinet Pinot Noir"],
+     "Australia", "Tasmania", "sparkling"),
+
+    # ── Argentina – more regions ──────────────────────────────────────────────
+    ("argentina-regions",   ["Zuccardi Valle de Uco", "Catena Zapata Adrianna",
+                              "Achaval Ferrer Malbec", "Clos de los Siete Malbec",
+                              "Torrontés Cafayate Salta"],
+     "Argentina", "Argentina", "red"),
+
+    # ── Chile – more regions ──────────────────────────────────────────────────
+    ("chile-regions",       ["Almaviva Puente Alto", "Seña Aconcagua",
+                              "Don Melchor Cabernet", "Viñedo Chadwick",
+                              "Concha y Toro Carmin de Peumo"],
+     "Chile", "Chile", "red"),
 ]
 
 
