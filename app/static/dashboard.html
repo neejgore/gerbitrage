@@ -515,7 +515,7 @@ async function doSearch() {
     const bestScore = results.length ? results[0].match_score : 0;
 
     // Good catalog match — show normally
-    if (results.length && bestScore >= 0.65) {
+    if (results.length && bestScore >= 0.72) {
       renderResults(results, q);
       return;
     }
@@ -569,7 +569,11 @@ function renderAnalyzeResult(query, data, catalogFallbacks) {
   const ep = data.effective_pricing;
   const ident = data.identification;
 
-  if (!ep && !ident?.matched) {
+  // Treat low-confidence catalog matches as not found — show live result instead
+  const identConfidence = ident?.confidence_level;
+  const goodMatch = ident?.matched && (identConfidence === 'very_high' || identConfidence === 'high' || identConfidence === 'medium');
+
+  if (!goodMatch) {
     // Truly unknown — show low-confidence fallbacks if any
     const fallbackHtml = catalogFallbacks.length
       ? `<div style="margin-top:12px;font-size:11px;color:var(--muted)">Closest catalog matches:</div>
@@ -590,9 +594,9 @@ function renderAnalyzeResult(query, data, catalogFallbacks) {
 
   const avg = ep?.avg_retail;
   const wholesale = ep?.estimated_wholesale;
-  const source = ep?.price_source || 'vivino';
-  const confidence = ep?.data_confidence || 'low';
-  const confColor = confidence === 'high' ? '#3ecf8e' : confidence === 'medium' ? '#e87d3e' : '#6e6e8a';
+  // Show identification confidence, not pricing confidence
+  const confidence = identConfidence || 'low';
+  const confColor = confidence === 'very_high' ? '#3ecf8e' : confidence === 'high' ? '#3ecf8e' : confidence === 'medium' ? '#e87d3e' : '#6e6e8a';
 
   container.innerHTML = `
     <div class="wine-card" style="border:1px solid var(--accent);cursor:default">
