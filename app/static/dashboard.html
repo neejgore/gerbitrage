@@ -511,7 +511,24 @@ async function doSearch() {
   try {
     const res = await fetch(`${API}/search?q=${encodeURIComponent(q)}&limit=8`);
     const data = await res.json();
-    renderResults(data.results || []);
+    const results = data.results || [];
+    const bestScore = results.length ? results[0].match_score : 0;
+
+    // Good catalog match — show normally
+    if (results.length && bestScore >= 0.65) {
+      renderResults(results, q);
+      return;
+    }
+
+    // Weak or no catalog match — search Vivino live via /analyze
+    container.innerHTML = '<div class="loading-row"><div class="spinner"></div> Not in catalog — searching Vivino live…</div>';
+    const analyzeRes = await fetch(`${API}/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ menu_text: q }),
+    });
+    const analyzeData = await analyzeRes.json();
+    renderAnalyzeResult(q, analyzeData, results);
   } catch (e) {
     container.innerHTML = `<div class="empty">⚠ Could not reach API</div>`;
   }
@@ -523,13 +540,12 @@ function clearSearch() {
   document.getElementById('detail-panel').classList.remove('visible');
 }
 
-function renderResults(wines) {
+function renderResults(wines, query) {
   const container = document.getElementById('search-results');
   if (!wines.length) {
     container.innerHTML = '<div class="empty">No wines found</div>';
     return;
   }
-
   container.innerHTML = `<div class="results-grid">
     ${wines.map(w => `
       <div class="wine-card" onclick="selectWine('${w.id}', this)">
@@ -546,6 +562,72 @@ function renderResults(wines) {
       </div>
     `).join('')}
   </div>`;
+}
+
+function renderAnalyzeResult(query, data, catalogFallbacks) {
+  const container = document.getElementById('search-results');
+  const ep = data.effective_pricing;
+  const ident = data.identification;
+
+  if (!ep && !ident?.matched) {
+    // Truly unknown — show low-confidence fallbacks if any
+    const fallbackHtml = catalogFallbacks.length
+      ? `<div style="margin-top:12px;font-size:11px;color:var(--muted)">Closest catalog matches:</div>
+         <div class="results-grid" style="margin-top:6px">${catalogFallbacks.slice(0,3).map(w => `
+           <div class="wine-card" onclick="selectWine('${w.id}', this)">
+             <div class="wine-card-name">${w.name}</div>
+             <div class="wine-card-producer">${w.producer}</div>
+             <div class="wine-card-meta">
+               <span class="tag tag-type-${w.wine_type}">${w.wine_type}</span>
+               <span class="tag">${w.country}</span>
+               <span class="price-tag">$${w.avg_retail_price.toLocaleString()}</span>
+             </div>
+           </div>`).join('')}</div>`
+      : '';
+    container.innerHTML = `<div class="empty">"${query}" not found on Vivino. ${fallbackHtml}</div>`;
+    return;
+  }
+
+  const avg = ep?.avg_retail;
+  const wholesale = ep?.estimated_wholesale;
+  const source = ep?.price_source || 'vivino';
+  const confidence = ep?.data_confidence || 'low';
+  const confColor = confidence === 'high' ? '#3ecf8e' : confidence === 'medium' ? '#e87d3e' : '#6e6e8a';
+
+  container.innerHTML = `
+    <div class="wine-card" style="border:1px solid var(--accent);cursor:default">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div class="wine-card-name">${ident?.name || query}</div>
+          <div class="wine-card-producer">${ident?.producer || ''}</div>
+        </div>
+        <span style="font-size:10px;color:${confColor};background:${confColor}22;padding:2px 8px;border-radius:8px;font-weight:600;white-space:nowrap">${confidence} confidence</span>
+      </div>
+      <div class="wine-card-meta" style="margin-top:10px">
+        ${ident?.wine_type ? `<span class="tag tag-type-${ident.wine_type}">${ident.wine_type}</span>` : ''}
+        ${ident?.price_tier ? `<span class="tag tag-tier">${ident.price_tier}</span>` : ''}
+        ${ident?.region ? `<span class="tag">${ident.region}</span>` : ''}
+        ${avg ? `<span class="price-tag">$${avg.toLocaleString()}</span>` : ''}
+      </div>
+      ${avg ? `<div style="margin-top:10px;font-size:12px;color:var(--muted)">
+        Avg retail <strong style="color:var(--green)">$${avg.toLocaleString()}</strong>
+        ${wholesale ? ` · Est. wholesale <strong style="color:var(--accent2)">$${wholesale.toLocaleString()}</strong>` : ''}
+      </div>` : ''}
+      <div style="margin-top:6px;font-size:10px;color:var(--muted)">
+        ${ep?.price_basis_note || 'Live Vivino lookup — added to catalog for future searches'}
+      </div>
+    </div>
+    ${catalogFallbacks.length ? `
+      <div style="margin-top:12px;font-size:11px;color:var(--muted)">Similar wines in catalog:</div>
+      <div class="results-grid" style="margin-top:6px">${catalogFallbacks.slice(0,2).map(w => `
+        <div class="wine-card" onclick="selectWine('${w.id}', this)">
+          <div class="wine-card-name">${w.name}</div>
+          <div class="wine-card-producer">${w.producer}</div>
+          <div class="wine-card-meta">
+            <span class="tag">${w.country}</span>
+            <span class="price-tag">$${w.avg_retail_price.toLocaleString()}</span>
+          </div>
+        </div>`).join('')}</div>` : ''}`;
 }
 
 // ── Wine detail ────────────────────────────────────────────────────────────
