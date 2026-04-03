@@ -573,8 +573,8 @@ function renderAnalyzeResult(query, data, catalogFallbacks) {
   const identConfidence = ident?.confidence_level;
   const goodMatch = ident?.matched && (identConfidence === 'very_high' || identConfidence === 'high' || identConfidence === 'medium');
 
-  if (!goodMatch) {
-    // Truly unknown — show low-confidence fallbacks if any
+  if (!goodMatch && !ep) {
+    // Truly no result anywhere — show closest catalog wines as fallbacks
     const fallbackHtml = catalogFallbacks.length
       ? `<div style="margin-top:12px;font-size:11px;color:var(--muted)">Closest catalog matches:</div>
          <div class="results-grid" style="margin-top:6px">${catalogFallbacks.slice(0,3).map(w => `
@@ -594,23 +594,26 @@ function renderAnalyzeResult(query, data, catalogFallbacks) {
 
   const avg = ep?.avg_retail;
   const wholesale = ep?.estimated_wholesale;
-  // Show identification confidence, not pricing confidence
-  const confidence = identConfidence || 'low';
-  const confColor = confidence === 'very_high' ? '#3ecf8e' : confidence === 'high' ? '#3ecf8e' : confidence === 'medium' ? '#e87d3e' : '#6e6e8a';
+  // For dynamic results (no catalog match), use pricing confidence; for catalog hits use ident confidence
+  const confidence = goodMatch ? (identConfidence || 'low') : (ep?.data_confidence || 'low');
+  const confColor = confidence === 'very_high' || confidence === 'high' ? '#3ecf8e' : confidence === 'medium' ? '#e87d3e' : '#6e6e8a';
+  // Display name: catalog match uses wine name; dynamic result uses the query itself
+  const displayName = goodMatch ? (ident?.name || query) : query;
+  const displayProducer = goodMatch ? (ident?.producer || '') : (ep?.price_basis_note ? '' : '');
 
   container.innerHTML = `
     <div class="wine-card" style="border:1px solid var(--accent);cursor:default">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div>
-          <div class="wine-card-name">${ident?.name || query}</div>
-          <div class="wine-card-producer">${ident?.producer || ''}</div>
+          <div class="wine-card-name">${displayName}</div>
+          ${displayProducer ? `<div class="wine-card-producer">${displayProducer}</div>` : ''}
         </div>
         <span style="font-size:10px;color:${confColor};background:${confColor}22;padding:2px 8px;border-radius:8px;font-weight:600;white-space:nowrap">${confidence} confidence</span>
       </div>
       <div class="wine-card-meta" style="margin-top:10px">
-        ${ident?.wine_type ? `<span class="tag tag-type-${ident.wine_type}">${ident.wine_type}</span>` : ''}
-        ${ident?.price_tier ? `<span class="tag tag-tier">${ident.price_tier}</span>` : ''}
-        ${ident?.region ? `<span class="tag">${ident.region}</span>` : ''}
+        ${goodMatch && ident?.wine_type ? `<span class="tag tag-type-${ident.wine_type}">${ident.wine_type}</span>` : ''}
+        ${ep?.price_tier ? `<span class="tag tag-tier">${ep.price_tier}</span>` : ''}
+        ${goodMatch && ident?.region ? `<span class="tag">${ident.region}</span>` : ''}
         ${avg ? `<span class="price-tag">$${avg.toLocaleString()}</span>` : ''}
       </div>
       ${avg ? `<div style="margin-top:10px;font-size:12px;color:var(--muted)">
@@ -618,7 +621,7 @@ function renderAnalyzeResult(query, data, catalogFallbacks) {
         ${wholesale ? ` · Est. wholesale <strong style="color:var(--accent2)">$${wholesale.toLocaleString()}</strong>` : ''}
       </div>` : ''}
       <div style="margin-top:6px;font-size:10px;color:var(--muted)">
-        ${ep?.price_basis_note || 'Live Vivino lookup — added to catalog for future searches'}
+        ${ep?.price_basis_note || (goodMatch ? 'Matched in catalog' : 'Regional price estimate — Vivino lookup running in background')}
       </div>
     </div>
     ${catalogFallbacks.length ? `
