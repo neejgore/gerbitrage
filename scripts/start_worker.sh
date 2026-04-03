@@ -49,16 +49,26 @@ fi
 
 echo "[worker] Starting Vivino pricing worker…"
 
-# Run the full vintage matrix first (skips already-cached entries).
-# When that finishes (or on restart), loop back and pick up any new wines
-# added by the catalog builder.
+# ── Catalog builder loop (runs independently in background) ──────────────────
+# Continuously expands extended_catalog.json with new wines from Vivino.
+# Runs its own loop so it doesn't wait for vintage pricing to finish.
+catalog_loop() {
+    while true; do
+        echo "[catalog] Running catalog builder (target: 500/region)…"
+        python scripts/vivino_catalog_builder.py --max 500 --resume
+        echo "[catalog] Catalog cycle done. Sleeping 30 min…"
+        sleep 1800
+    done
+}
+catalog_loop &
+
+# ── Vintage pricing loop (main loop) ─────────────────────────────────────────
+# Prices every wine × every vintage. Skips already-cached entries so it only
+# does new work each cycle (new wines added by catalog builder get priced here).
 while true; do
     echo "[worker] Running vintage matrix (skip-known)…"
     python scripts/vivino_price_all.py --vintages all --skip-known
 
-    echo "[worker] Running catalog builder…"
-    python scripts/vivino_catalog_builder.py --max 300 --resume
-
-    echo "[worker] Cycle complete. Sleeping 1 hour before next refresh…"
+    echo "[worker] Vintage cycle done. Sleeping 1 hour…"
     sleep 3600
 done
