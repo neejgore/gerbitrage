@@ -135,11 +135,12 @@ def _score_candidate(
     # ── A. Fuzzy text similarity (four metrics, weighted) ──────────────────
     ts = fuzz.token_sort_ratio(q, entry.normalized_name) / 100.0
     tset = fuzz.token_set_ratio(q, entry.normalized_name) / 100.0
-    partial = fuzz.partial_ratio(q, entry.normalized_name) / 100.0
     wr = fuzz.WRatio(q, entry.normalized_name) / 100.0
     jw = JaroWinkler.similarity(q, entry.normalized_name)
 
-    name_score = 0.30 * ts + 0.25 * tset + 0.20 * partial + 0.15 * wr + 0.10 * jw
+    # partial_ratio rewards substring matches (e.g. "wood" in both "brasswood"
+    # and "moss wood") which produces false positives on proper nouns. Removed.
+    name_score = 0.35 * ts + 0.30 * tset + 0.25 * wr + 0.10 * jw
 
     # ── B. Producer-only score ──────────────────────────────────────────────
     producer_ts = fuzz.token_sort_ratio(q, entry.normalized_producer) / 100.0
@@ -244,13 +245,12 @@ def identify_wine(
     query_tokens = _significant_tokens(parsed.normalized_search)
 
     # ── Pre-filter: only score entries with ≥1 shared token ────────────────
-    # When the query is very short (1–2 words) we skip the pre-filter to
-    # avoid incorrectly dropping good candidates.
-    short_query = len(query_tokens) <= 2
-
+    # Always require at least one overlapping significant token. Wine names
+    # are proper nouns — if the query word isn't in the candidate's tokens
+    # at all, it cannot be the right wine.
     candidates: list[tuple[float, dict, _CatalogEntry]] = []
     for entry in _INDEX:
-        if not short_query and _token_overlap(query_tokens, entry.tokens) == 0:
+        if query_tokens and _token_overlap(query_tokens, entry.tokens) == 0:
             continue
         score, breakdown = _score_candidate(parsed, entry)
         if score >= LOW_THRESHOLD:

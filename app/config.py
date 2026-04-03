@@ -49,8 +49,8 @@ class Settings(BaseSettings):
 
     # Identification confidence thresholds
     high_confidence_threshold: float = 0.85
-    medium_confidence_threshold: float = 0.65
-    min_match_threshold: float = 0.45
+    medium_confidence_threshold: float = 0.68
+    min_match_threshold: float = 0.55
 
     # API limits
     max_batch_size: int = 50
