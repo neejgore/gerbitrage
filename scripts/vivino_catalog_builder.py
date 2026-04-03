@@ -246,6 +246,196 @@ REGION_QUERIES = [
     ("fortified",           ["Vintage Port", "Graham's Port", "Taylor Fladgate Port",
                               "Amontillado Sherry", "Oloroso Sherry"],
      "Portugal", "Douro / Jerez", "fortified"),
+
+    # ── Beaujolais ────────────────────────────────────────────────────────────
+    ("beaujolais",          ["Morgon", "Moulin-à-Vent", "Fleurie", "Juliénas",
+                              "Chénas", "Chiroubles", "Régnié", "Côte de Brouilly",
+                              "Brouilly", "Beaujolais Villages"],
+     "France", "Beaujolais", "red"),
+
+    # ── Jura ──────────────────────────────────────────────────────────────────
+    ("jura",                ["Vin Jaune Arbois", "Poulsard Arbois", "Trousseau Arbois",
+                              "Côtes du Jura Chardonnay", "Château-Chalon"],
+     "France", "Jura", "white"),
+
+    # ── Provence ──────────────────────────────────────────────────────────────
+    ("provence",            ["Bandol Rouge", "Côtes de Provence Rosé",
+                              "Cassis Blanc", "Palette"],
+     "France", "Provence", "rosé"),
+
+    # ── Languedoc-Roussillon ──────────────────────────────────────────────────
+    ("languedoc",           ["Pic Saint-Loup", "Terrasses du Larzac", "Faugères",
+                              "Saint-Chinian", "Minervois", "Corbières",
+                              "Roussillon Villages", "Collioure"],
+     "France", "Languedoc-Roussillon", "red"),
+
+    # ── Loire – reds & more ───────────────────────────────────────────────────
+    ("loire-red",           ["Chinon Rouge", "Bourgueil", "Saumur-Champigny",
+                              "Anjou Rouge", "Touraine Amboise"],
+     "France", "Loire Valley", "red"),
+    ("loire-dessert",       ["Coteaux du Layon", "Quarts de Chaume",
+                              "Bonnezeaux", "Vouvray Moelleux"],
+     "France", "Loire Valley", "dessert"),
+
+    # ── Corsica ───────────────────────────────────────────────────────────────
+    ("corsica",             ["Patrimonio", "Ajaccio Rouge", "Vermentino Corsica"],
+     "France", "Corsica", "red"),
+
+    # ── More Burgundy ─────────────────────────────────────────────────────────
+    ("burgundy-pommard",    ["Pommard Premier Cru", "Volnay Premier Cru",
+                              "Savigny-lès-Beaune", "Aloxe-Corton"],
+     "France", "Burgundy", "red"),
+    ("burgundy-chablis",    ["Chablis Premier Cru", "Chablis", "Petit Chablis"],
+     "France", "Burgundy", "white"),
+
+    # ── More Bordeaux ─────────────────────────────────────────────────────────
+    ("bordeaux-satellites", ["Lalande-de-Pomerol", "Saint-Georges-Saint-Émilion",
+                              "Listrac-Médoc", "Moulis", "Médoc"],
+     "France", "Bordeaux", "red"),
+
+    # ── Italy – Veneto ────────────────────────────────────────────────────────
+    ("veneto",              ["Soave Classico", "Lugana", "Custoza",
+                              "Prosecco di Valdobbiadene", "Bardolino"],
+     "Italy", "Veneto", "white"),
+
+    # ── Italy – Friuli & Alto Adige ───────────────────────────────────────────
+    ("friuli-alto-adige",   ["Collio Friulano", "Collio Pinot Grigio",
+                              "Alto Adige Gewürztraminer", "Alto Adige Pinot Nero",
+                              "Ribolla Gialla Friuli", "Ramato Pinot Grigio"],
+     "Italy", "Northeast Italy", "white"),
+
+    # ── Italy – Campania ──────────────────────────────────────────────────────
+    ("campania",            ["Fiano di Avellino", "Greco di Tufo",
+                              "Taurasi", "Aglianico del Taburno",
+                              "Falanghina del Sannio"],
+     "Italy", "Campania", "white"),
+
+    # ── Italy – Abruzzo & Marche ──────────────────────────────────────────────
+    ("abruzzo-marche",      ["Montepulciano d'Abruzzo", "Trebbiano d'Abruzzo",
+                              "Pecorino Abruzzo", "Verdicchio dei Castelli di Jesi",
+                              "Verdicchio di Matelica"],
+     "Italy", "Central Italy", "red"),
+
+    # ── Italy – Puglia & Basilicata ───────────────────────────────────────────
+    ("puglia-basilicata",   ["Primitivo di Manduria", "Salice Salentino",
+                              "Negroamaro Salento", "Aglianico del Vulture",
+                              "Negro Amaro"],
+     "Italy", "Southern Italy", "red"),
+
+    # ── Italy – Sicily ────────────────────────────────────────────────────────
+    ("sicily",              ["Etna Bianco", "Nerello Mascalese Etna",
+                              "Nero d'Avola Sicilia", "Cerasuolo di Vittoria",
+                              "Grillo Sicilia", "Catarratto"],
+     "Italy", "Sicily", "red"),
+
+    # ── Italy – Sardinia ──────────────────────────────────────────────────────
+    ("sardinia",            ["Cannonau di Sardegna", "Vermentino di Gallura",
+                              "Carignano del Sulcis", "Monica di Sardegna"],
+     "Italy", "Sardinia", "red"),
+
+    # ── Italy – Umbria ────────────────────────────────────────────────────────
+    ("umbria",              ["Sagrantino di Montefalco", "Montefalco Rosso",
+                              "Orvieto Classico", "Torgiano Rosso"],
+     "Italy", "Umbria", "red"),
+
+    # ── Spain – more ──────────────────────────────────────────────────────────
+    ("spain-northwest",     ["Albariño Rías Baixas", "Godello Valdeorras",
+                              "Mencía Bierzo", "Ribeira Sacra Mencía"],
+     "Spain", "Northwest Spain", "white"),
+    ("spain-centre",        ["Toro Tinta de Toro", "Rueda Verdejo",
+                              "Cigales Tempranillo", "Ribera del Duero Crianza"],
+     "Spain", "Central Spain", "red"),
+    ("spain-south",         ["Priorat Garnacha", "Montsant",
+                              "Jumilla Monastrell", "Yecla Monastrell",
+                              "Cava Brut Nature"],
+     "Spain", "Southern Spain", "red"),
+    ("sherry",              ["Fino Sherry", "Manzanilla Sherry", "Palo Cortado",
+                              "Pedro Ximénez", "Cream Sherry"],
+     "Spain", "Jerez", "fortified"),
+
+    # ── Germany – more ────────────────────────────────────────────────────────
+    ("germany-mosel",       ["Mosel Riesling Kabinett", "Mosel Riesling Beerenauslese",
+                              "Saar Riesling", "Ruwer Riesling"],
+     "Germany", "Mosel", "white"),
+    ("germany-other",       ["Nahe Riesling", "Rheinhessen Riesling",
+                              "Baden Spätburgunder", "Franken Silvaner",
+                              "Württemberg Lemberger"],
+     "Germany", "Germany", "white"),
+
+    # ── USA – Central Coast & other ───────────────────────────────────────────
+    ("usa-central-coast",   ["Paso Robles Cabernet", "Santa Barbara Pinot Noir",
+                              "Santa Cruz Mountains Chardonnay", "Sta. Rita Hills Pinot Noir",
+                              "Edna Valley Chardonnay", "Monterey Pinot Noir"],
+     "USA", "California Central Coast", "red"),
+    ("usa-east",            ["Finger Lakes Riesling", "Virginia Cabernet Franc",
+                              "Long Island Merlot", "Willamette Valley Chardonnay"],
+     "USA", "Eastern USA", "white"),
+
+    # ── Greece ────────────────────────────────────────────────────────────────
+    ("greece",              ["Assyrtiko Santorini", "Xinomavro Naoussa",
+                              "Agiorgitiko Nemea", "Malagousia", "Moschofilero",
+                              "Xinomavro Amyndeon"],
+     "Greece", "Greece", "white"),
+
+    # ── Hungary ───────────────────────────────────────────────────────────────
+    ("hungary",             ["Tokaji Aszú 5 Puttonyos", "Tokaji Furmint",
+                              "Egri Bikavér", "Villány Cabernet Franc",
+                              "Tokaji Szamorodni"],
+     "Hungary", "Hungary", "dessert"),
+
+    # ── Japan ─────────────────────────────────────────────────────────────────
+    ("japan",               ["Koshu Grace Wine", "Suntory Tomi no Oka",
+                              "Château Mercian Hokushin", "Niigata Sake"],
+     "Japan", "Japan", "white"),
+
+    # ── Israel ────────────────────────────────────────────────────────────────
+    ("israel",              ["Golan Heights Winery", "Yarden Cabernet Sauvignon",
+                              "Domaine du Castel", "Recanati Reserve",
+                              "Clos de Gat Syrah"],
+     "Israel", "Israel", "red"),
+
+    # ── Georgia (country) ─────────────────────────────────────────────────────
+    ("georgia-country",     ["Rkatsiteli Kakheti", "Saperavi Kakheti",
+                              "Kindzmarauli", "Mukuzani", "Tsinandali"],
+     "Georgia", "Georgia", "red"),
+
+    # ── Canada ────────────────────────────────────────────────────────────────
+    ("canada",              ["Icewine Vidal Niagara", "Okanagan Pinot Noir",
+                              "Inniskillin Icewine", "Mission Hill Meritage"],
+     "Canada", "Canada", "dessert"),
+
+    # ── Croatia & Slovenia ────────────────────────────────────────────────────
+    ("adriatic",            ["Plavac Mali Dingač", "Pošip Korčula",
+                              "Malvazija Istriana", "Teran Istria",
+                              "Brda Rebula"],
+     "Croatia", "Adriatic", "red"),
+
+    # ── South America – more ──────────────────────────────────────────────────
+    ("argentina-more",      ["Malbec Luján de Cuyo", "Malbec Valle de Uco",
+                              "Torrontés Salta", "Bonarda Mendoza",
+                              "Cabernet Franc Patagonia"],
+     "Argentina", "Argentina", "red"),
+    ("chile-more",          ["Carménère Colchagua", "Pinot Noir Casablanca",
+                              "Syrah Elqui Valley", "Carmenere Cachapoal",
+                              "Sauvignon Blanc Leyda"],
+     "Chile", "Chile", "red"),
+
+    # ── South Africa – more ───────────────────────────────────────────────────
+    ("south-africa-more",   ["Chenin Blanc Stellenbosch", "Pinotage Paarl",
+                              "Syrah Swartland", "Cape Blend",
+                              "Elgin Pinot Noir"],
+     "South Africa", "South Africa", "white"),
+
+    # ── Australia – more ──────────────────────────────────────────────────────
+    ("australia-more",      ["Hunter Valley Semillon", "Margaret River Cabernet",
+                              "Mornington Peninsula Pinot Noir",
+                              "Grampians Shiraz", "Adelaide Hills Chardonnay"],
+     "Australia", "Australia", "white"),
+
+    # ── New Zealand – more ────────────────────────────────────────────────────
+    ("new-zealand-more",    ["Martinborough Pinot Noir", "Waipara Riesling",
+                              "Gisborne Chardonnay", "Hawke's Bay Merlot"],
+     "New Zealand", "New Zealand", "red"),
 ]
 
 
