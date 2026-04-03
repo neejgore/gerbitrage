@@ -335,15 +335,21 @@ def build_search_query(wine_name: str, producer: str, vintage: Optional[int]) ->
         base_name = n  # always prefer just the wine name
 
     queries: list[str] = []
+
+    # When producer is separate from wine_name (e.g. producer="Brasswood",
+    # wine_name="Cabernet Franc"), lead with the combined form so Vivino
+    # gets the most specific query first. Generic varietal-only searches
+    # return random wines and may short-circuit before the right one is tried.
+    if p_clean and p_clean.lower() not in base_name.lower():
+        combo = f"{p_clean} {base_name}".strip()
+        if vintage:
+            queries.append(f"{combo} {vintage}")
+        queries.append(combo)
+
+    # Wine name alone (with and without vintage)
     if vintage:
         queries.append(f"{base_name} {vintage}")
     queries.append(base_name)
-
-    # Fallback: short producer + name (for wines whose name is generic, e.g. "Cabernet Sauvignon")
-    if p_clean and p_clean.lower() not in base_name.lower():
-        combo = f"{p_clean} {base_name}".strip()
-        if combo not in queries:
-            queries.append(combo)
 
     return queries
 
@@ -491,7 +497,11 @@ def _pick_best_card(
         candidates.append(card)
 
     if not candidates:
-        # Relax to: take the first card with a valid price (no name filter)
+        # Only relax the name filter when we had no key_words to begin with.
+        # When key_words are present and nothing matched, the result is wrong —
+        # returning the first priced card would give a completely different wine.
+        if key_words:
+            return None
         for card in cards:
             price = card.get("price", 0)
             if not price or price <= 0:
