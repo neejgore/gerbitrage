@@ -710,6 +710,81 @@ REGION_QUERIES = [
                               "Weszeli Kamptal", "Clemensbusch Mosel",
                               "Királyudvar Tokaji", "Judith Beck Burgenland"],
      "Austria", "Austria", "red"),
+
+    # ── Beaujolais Natural / Cru Producers ────────────────────────────────────
+    # Broad "Morgon" queries surface popular commercial wines; these cult natural
+    # producers require name-level targeting to be discovered.
+    ("beaujolais-natural",  ["Marcel Lapierre Morgon", "Jean Foillard Morgon",
+                              "Jean-Paul Thévenet Morgon", "Guy Breton Morgon",
+                              "Julien Sunier Fleurie", "Yvon Métras Fleurie",
+                              "Jean-Louis Dutraive Fleurie", "Anthony Thevenet Beaujolais",
+                              "Mathieu Lapierre Morgon", "Jean-Ernest Descombes Morgon"],
+     "France", "Beaujolais", "red"),
+
+    # ── Germany Boutique Estates ──────────────────────────────────────────────
+    ("germany-boutique",    ["Clemensbusch Mosel", "Peter Lauer Saar",
+                              "Van Volxem Saar", "Markus Molitor Mosel",
+                              "Emrich-Schönleber Nahe", "Dönnhoff Nahe",
+                              "Wittmann Rheinhessen", "Weingut Keller Rheinhessen",
+                              "Schäfer-Fröhlich Nahe", "Kühling-Gillot Rheinhessen"],
+     "Germany", "Germany", "white"),
+
+    # ── Jura Boutique Domaines ────────────────────────────────────────────────
+    ("jura-boutique",       ["Domaine de Montbourgeau Jura", "Domaine Rolet Arbois",
+                              "Philippe Ganevat Jura", "Overnoy Houillon Jura",
+                              "Stéphane Tissot Arbois", "Domaine de la Pinte Arbois",
+                              "Berthet-Bondet Château-Chalon", "Les Pieds sur Terre Jura",
+                              "Bénédicte et Stéphane Tissot", "Jacques Puffeney Arbois"],
+     "France", "Jura", "white"),
+
+    # ── Italy Skin-Contact & Natural Producers ────────────────────────────────
+    ("italy-natural",       ["Paolo Bea Umbria", "Radikon Friuli",
+                              "Josko Gravner Friuli", "Elisabetta Foradori Trentino",
+                              "La Stoppa Emilia Romagna", "Frank Cornelissen Etna",
+                              "Arianna Occhipinti Sicily", "Massa Vecchia Tuscany",
+                              "I Vigneri Etna", "Cascina degli Ulivi Piedmont"],
+     "Italy", "Italy", "white"),
+
+    # ── Australia Small / Natural Producers ──────────────────────────────────
+    ("australia-natural",   ["Brash Higgins McLaren Vale", "Jauma Wines",
+                              "Lucy Margaux Wines", "Tom Shobbrook Barossa",
+                              "BK Wines Adelaide Hills", "Patrick Sullivan Gippsland",
+                              "Gentle Folk Adelaide Hills", "Ochota Barrels",
+                              "Si Vintners Western Australia", "Commune of Buttons"],
+     "Australia", "Australia", "red"),
+
+    # ── Champagne Grower-Producers (RM) ───────────────────────────────────────
+    ("champagne-rm-1",      ["Bereche et Fils Champagne", "Chartogne-Taillet Champagne",
+                              "Pierre Peters Champagne", "Gaston Chiquet Champagne",
+                              "Francis Boulard Champagne", "Laherte Frères Champagne",
+                              "Benoit Lahaye Champagne", "Dehours et Fils Champagne"],
+     "France", "Champagne", "sparkling"),
+    ("champagne-rm-2",      ["Fleury Père et Fils Champagne", "Franck Bonville Champagne",
+                              "Varnier-Fannière Champagne", "De Sousa Champagne",
+                              "Marie-Noëlle Ledru Champagne", "Pascal Doquet Champagne",
+                              "Tarlant Champagne", "Larmandier-Bernier Champagne"],
+     "France", "Champagne", "sparkling"),
+
+    # ── New Zealand Boutique ──────────────────────────────────────────────────
+    ("new-zealand-boutique", ["Pyramid Valley Vineyards", "Clos Henri Marlborough",
+                               "Felton Road Central Otago", "Rippon Vineyard",
+                               "Ata Rangi Martinborough", "Dry River Martinborough",
+                               "Kusuda Wines Martinborough", "Te Mata Estate Hawke's Bay"],
+     "New Zealand", "New Zealand", "red"),
+
+    # ── South Africa Boutique ─────────────────────────────────────────────────
+    ("south-africa-boutique", ["Sadie Family Wines", "David and Nadia Wines",
+                                "Mullineux Wines Swartland", "Testalonga Swartland",
+                                "Intellego Wines Swartland", "AA Badenhorst Swartland",
+                                "Botanica Wines Stellenbosch", "Crystallum Wines"],
+     "South Africa", "South Africa", "red"),
+
+    # ── Portugal Boutique ─────────────────────────────────────────────────────
+    ("portugal-boutique",   ["Niepoort Douro", "Quinta do Vale Meão Douro",
+                              "Mouchão Alentejo", "Aphros Vinho Verde",
+                              "Quinta da Pellada Dão", "Herdade do Esporão",
+                              "Conceito Douro", "Dirk Niepoort"],
+     "Portugal", "Portugal", "red"),
 ]
 
 
