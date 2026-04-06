@@ -785,6 +785,72 @@ REGION_QUERIES = [
                               "Quinta da Pellada Dão", "Herdade do Esporão",
                               "Conceito Douro", "Dirk Niepoort"],
      "Portugal", "Portugal", "red"),
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # NEW BLOCKS — gaps identified from French Laundry, Per Se, Quince lists
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # ── Burgundy Micro-Domaines (top-list unmatched) ──────────────────────────
+    ("burgundy-micro-1",    ["Lignier-Michelot Morey-Saint-Denis", "Hubert Lignier Burgundy",
+                              "Domaine Taupenot-Merme Burgundy", "Domaine Rossignol-Trapet",
+                              "Domaine de Villaine Bouzeron", "Anne et Hervé Sigaut Chambolle",
+                              "Domaine du Collier Saumur", "Domaine Jamet Côte-Rôtie"],
+     "France", "Burgundy", "red"),
+    ("burgundy-micro-2",    ["Michel Niellon Chassagne-Montrachet", "Les Horées Burgundy",
+                              "Domaine Pierrick Bouley Volnay", "Domaine Philippe Livera",
+                              "Domaine de la Haute Olive Chinon", "Ruppert-Leroy Champagne",
+                              "BiNaume Gamay", "Maison Stephan Côte-Rôtie"],
+     "France", "Burgundy", "red"),
+
+    # ── Germany Fine Estates (top-list unmatched) ─────────────────────────────
+    ("germany-fine",        ["Zilliken Saarburger Rausch Mosel", "Karthäuserhof Mosel",
+                              "Carl Loewen Mosel", "Alfred Merkelbach Mosel",
+                              "Pichler-Krutzler Wachau", "Selbach-Oster Mosel",
+                              "Robert Weil Riesling Rheingau", "Leitz Rüdesheim Rheingau"],
+     "Germany", "Germany", "white"),
+
+    # ── Austria Fine Estates ──────────────────────────────────────────────────
+    ("austria-fine",        ["Veyder-Malberg Wachau", "Wieninger Wien",
+                              "Pichler-Krutzler Wachau", "Hirsch Kamptal",
+                              "Nikolaihof Wachau", "Alzinger Wachau",
+                              "Tegernseerhof Wachau", "Knoll Wachau"],
+     "Austria", "Austria", "white"),
+
+    # ── Italy Fine Estates (Valtellina, Piedmont heritage) ───────────────────
+    ("italy-fine",          ["Nino Negri Valgella Valtellina", "Burlotto Barolo Monvigliero",
+                              "Cappellano Barolo", "Vallana Piedmont",
+                              "Fontanafredda Barolo", "Giacomo Conterno Barolo",
+                              "Lorenzo Accomasso Barolo", "Elvio Cogno Barolo"],
+     "Italy", "Italy", "red"),
+
+    # ── California Specialist Producers ──────────────────────────────────────
+    ("california-specialists", ["Turley Wine Cellars Zinfandel", "Seven Apart Napa",
+                                 "Turnbull Wine Cellars Napa", "El Molino Chardonnay",
+                                 "Stony Hill Vineyard Chardonnay", "Paul Lato Wines",
+                                 "PerChance Wines Napa", "Chev Wines Sonoma"],
+     "USA", "California", "red"),
+
+    # ── Corsica & Rare French Appellations ───────────────────────────────────
+    ("france-rare",         ["Antoine Arena Patrimonio Corsica", "Clos Canarelli Corsica",
+                              "Domaine Leccia Corsica", "Eric Texier Brézème",
+                              "Domaine du Tunnel Cornas", "Chateau Rayas Chateauneuf",
+                              "Pierre Overnoy Arbois", "Ganevat Jura"],
+     "France", "France", "red"),
+
+    # ── Bordeaux Heritage (classic châteaux for older vintages) ──────────────
+    ("bordeaux-heritage",   ["Château Gruaud Larose Saint-Julien", "Château Giscours Margaux",
+                              "Château Léoville-Poyferré Saint-Julien", "Château Lynch-Bages",
+                              "Château Montrose Saint-Estèphe", "Château Calon-Ségur",
+                              "Château Pichon Baron", "Château Ducru-Beaucaillou"],
+     "France", "Bordeaux", "red"),
+
+    # ── French Laundry / Per Se Specific Gaps ────────────────────────────────
+    ("fl-perse-gaps",       ["Krug 27ème Édition Champagne", "Château Lafleur Les Pensées",
+                              "Domaine Leroy Musigny", "DRC Cuvée Duvault-Blochet",
+                              "Domaine de Villaine Aligoté Bouzeron",
+                              "Sylvain Cathiard Aligoté", "Roland Lavantureux Chablis",
+                              "Domaine Vacheron Sancerre"],
+     "France", "France", "red"),
 ]
 
 
