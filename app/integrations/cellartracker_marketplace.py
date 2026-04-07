@@ -26,7 +26,7 @@ iWine ID discovery
 ──────────────────
 Each catalog wine must be mapped to a CellarTracker `iWine` integer ID.
 The mapping is cached in `app/data/ct_wine_id_map.json`.
-If a wine is not in the map, the provider falls back to mock pricing.
+If a wine is not in the map, the provider returns None.
 
 Rate limiting
 ─────────────
@@ -45,8 +45,7 @@ from typing import Optional
 import httpx
 
 from app.config import get_settings
-from app.integrations.base import BasePricingProvider, RateLimiter, RawPricingResult, _mock_price_from_base
-from app.data.wine_catalog import WINE_CATALOG_BY_ID
+from app.integrations.base import BasePricingProvider, RateLimiter, RawPricingResult
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -98,7 +97,6 @@ class CellarTrackerMarketplaceProvider(BasePricingProvider):
         return bool(
             settings.cellartracker_username
             and settings.cellartracker_pwhash
-            and not settings.use_mock_pricing
         )
 
     async def fetch_pricing(
@@ -108,10 +106,8 @@ class CellarTrackerMarketplaceProvider(BasePricingProvider):
         vintage: Optional[int] = None,
         wine_id: Optional[str] = None,
     ) -> Optional[RawPricingResult]:
-        if settings.use_mock_pricing:
-            return self._mock(wine_id, vintage)
         if not self.is_available():
-            return None  # No credentials — don't fabricate data
+            return None
 
         iwine = wine_id and _WINE_ID_MAP.get(wine_id)
         if not iwine:
@@ -183,21 +179,6 @@ class CellarTrackerMarketplaceProvider(BasePricingProvider):
             logger.warning("CTMarket error for iWine=%d: %s", iwine, exc)
             return None
 
-    def _mock(self, wine_id: Optional[str], vintage: Optional[int]) -> Optional[RawPricingResult]:
-        base_price: Optional[float] = None
-        if wine_id and wine_id in WINE_CATALOG_BY_ID:
-            base_price = WINE_CATALOG_BY_ID[wine_id].avg_retail_price
-        if base_price is None:
-            return None
-        result = _mock_price_from_base(
-            base_price * 0.92,
-            vintage,
-            self.name,
-            spread_factor=0.18,
-            seed_key=wine_id or "",
-        )
-        result.url = f"https://www.cellartracker.com/list.asp?szSearch={wine_id}"
-        return result
 
 
 def _extract_bottle_prices(listings: list[dict]) -> list[float]:

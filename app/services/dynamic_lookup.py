@@ -144,7 +144,7 @@ async def dynamic_lookup(
 
     # Tier 1 – live Wine-Searcher search
     result: Optional[DynamicPricingResult] = None
-    if settings.wine_searcher_api_key and not settings.use_mock_pricing:
+    if settings.wine_searcher_api_key:
         result = await _wine_searcher_search(raw_text, parsed.vintage)
 
     # Tier 2 – regional proxy (with producer-aware premium adjustment)

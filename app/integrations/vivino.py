@@ -204,7 +204,7 @@ class VivinoProvider(BasePricingProvider):
     _rate_limiter = RateLimiter(min_delay=0.5, max_delay=1.0, max_backoff=30.0)
 
     def is_available(self) -> bool:
-        return not settings.use_mock_pricing
+        return True
 
     async def fetch_pricing(
         self,

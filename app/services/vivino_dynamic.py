@@ -10,7 +10,7 @@ Usage (from pricing_aggregator):
   asyncio.create_task(dynamic_lookup(wine_id, wine_name, producer, vintage))
 
 The task is "fire and forget":
-  - The current request returns mock prices (or catalog base price)
+  - The current request returns the catalog base price as a best estimate
   - The background task runs in parallel
   - The *next* request for the same wine gets real prices from cache
 

@@ -5,8 +5,8 @@ Total Wine has no public API, but their search endpoint returns structured
 JSON for product listings — it is the same data their website uses.
 No authentication is required; the endpoint is publicly accessible.
 
-When `use_mock_pricing` is True (development / test), falls back to
-deterministic mock data derived from catalog prices.
+No authentication required — Total Wine's search endpoint is public.
+Returns None when no pricing data is found.
 """
 from __future__ import annotations
 
@@ -17,8 +17,7 @@ from urllib.parse import quote_plus
 import httpx
 
 from app.config import get_settings
-from app.data.wine_catalog import WINE_CATALOG_BY_ID
-from app.integrations.base import BasePricingProvider, RateLimiter, RawPricingResult, _mock_price_from_base
+from app.integrations.base import BasePricingProvider, RateLimiter, RawPricingResult
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -60,7 +59,7 @@ class TotalWineProvider(BasePricingProvider):
     _rate_limiter = RateLimiter(min_delay=4.0, max_delay=8.0, max_backoff=300.0)
 
     def is_available(self) -> bool:
-        return not settings.use_mock_pricing
+        return True
 
     async def fetch_pricing(
         self,
@@ -69,8 +68,6 @@ class TotalWineProvider(BasePricingProvider):
         vintage: Optional[int] = None,
         wine_id: Optional[str] = None,
     ) -> Optional[RawPricingResult]:
-        if settings.use_mock_pricing:
-            return self._mock(wine_id, vintage)
         return await self._real(wine_name, producer, vintage, wine_id)
 
     # ── Real scraper ──────────────────────────────────────────────────────
@@ -145,30 +142,6 @@ class TotalWineProvider(BasePricingProvider):
             self._rate_limiter.record_error()
             logger.warning("Total Wine scrape error: %s", exc)
             return None
-
-    # ── Mock fallback ─────────────────────────────────────────────────────
-
-    def _mock(
-        self,
-        wine_id: Optional[str],
-        vintage: Optional[int],
-    ) -> Optional[RawPricingResult]:
-        base_price: Optional[float] = None
-        if wine_id and wine_id in WINE_CATALOG_BY_ID:
-            base_price = WINE_CATALOG_BY_ID[wine_id].avg_retail_price
-
-        if base_price is None:
-            return None
-
-        result = _mock_price_from_base(
-            base_price * _TOTAL_WINE_MARKUP,
-            vintage,
-            self.name,
-            spread_factor=0.08,
-            seed_key=wine_id or "",
-        )
-        result.url = f"https://www.totalwine.com/search/all?text={wine_id}"
-        return result
 
 
 # ── HTML / JSON price extractors ──────────────────────────────────────────────

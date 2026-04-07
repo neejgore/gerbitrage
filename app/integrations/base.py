@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import random
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -127,58 +126,3 @@ class BasePricingProvider(ABC):
         return True
 
 
-# ---------------------------------------------------------------------------
-# Shared mock utility – used by all providers when keys are absent
-# ---------------------------------------------------------------------------
-
-def _mock_price_from_base(
-    base_price: float,
-    vintage: Optional[int],
-    source: str,
-    spread_factor: float = 0.15,
-    seed_key: str = "",
-) -> RawPricingResult:
-    """
-    Generate a deterministic mock pricing result based on the wine's known avg_retail.
-
-    Uses a seeded RNG (keyed on wine name + vintage + source) so the same wine
-    always returns the same mock price — no drift across cache refreshes.
-
-    Vintage adjustments reflect real-world variation:
-      - Great vintages (e.g. 2015, 2016, 2019) push price up ~15–25 %
-      - Off vintages push price down ~10–20 %
-      - No vintage → use base_price as-is
-    """
-    great_vintages = {2015, 2016, 2018, 2019, 2010, 2009, 2005, 2000, 1996, 1990}
-    decent_vintages = {2014, 2017, 2012, 2008, 2006, 2004}
-
-    # Deterministic seed: same wine + vintage + source always → same number
-    seed = hash(f"{seed_key}:{vintage}:{source}") & 0x7FFFFFFF
-    rng = random.Random(seed)
-
-    multiplier = 1.0
-    if vintage:
-        if vintage in great_vintages:
-            multiplier = rng.uniform(1.15, 1.30)
-        elif vintage in decent_vintages:
-            multiplier = rng.uniform(1.00, 1.12)
-        else:
-            multiplier = rng.uniform(0.85, 1.05)
-
-    source_noise = rng.uniform(1 - spread_factor, 1 + spread_factor)
-    avg = round(base_price * multiplier * source_noise, 2)
-
-    spread = avg * 0.18
-    min_p = round(max(avg - spread, avg * 0.70), 2)
-    max_p = round(avg + spread, 2)
-    median_p = round((avg + min_p) / 2, 2)
-    listings = rng.randint(3, 120)
-
-    return RawPricingResult(
-        source=source,
-        avg_price=avg,
-        min_price=min_p,
-        max_price=max_p,
-        median_price=median_p,
-        num_listings=listings,
-    )
