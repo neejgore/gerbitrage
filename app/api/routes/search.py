@@ -14,14 +14,14 @@ from app.integrations.vivino import _price_cache
 router = APIRouter(prefix="/search", tags=["Search"])
 
 
-def _best_price(wine_id: str, catalog_price: float) -> float:
-    """Return the Vivino-cached price for a wine if available, else the catalog price."""
+def _best_price(wine_id: str) -> Optional[float]:
+    """Return the Vivino-cached price for a wine, or None if no real price exists."""
     entry = _price_cache.get(wine_id)
     if entry:
         p = entry.get("avg_price")
         if p and p > 0:
             return p
-    return catalog_price
+    return None
 
 
 @router.get("", response_model=WineSearchResponse, summary="Search the wine catalog")
@@ -54,7 +54,7 @@ async def search(
             appellation=m.wine.appellation,
             varietal=m.wine.varietal,
             wine_type=m.wine.wine_type,
-            avg_retail_price=_best_price(m.wine.id, m.wine.avg_retail_price),
+            avg_retail_price=_best_price(m.wine.id),
             price_tier=m.wine.price_tier,
             match_score=round(m.score, 4),
         )

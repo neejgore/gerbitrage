@@ -120,18 +120,18 @@ def _aggregate(
     price_tier: str,
 ) -> PricingBreakdown:
     if not results:
-        # No provider returned data – fall back to catalog base price
-        wholesale = _estimate_wholesale(avg_retail_base, price_tier)
+        # No provider returned data — return null prices, not catalog estimates.
+        # The caller should trigger a live lookup rather than display a fake number.
         return PricingBreakdown(
-            avg_retail=avg_retail_base,
-            min_retail=avg_retail_base,
-            max_retail=avg_retail_base,
-            median_retail=avg_retail_base,
-            estimated_wholesale=wholesale,
+            avg_retail=None,
+            min_retail=None,
+            max_retail=None,
+            median_retail=None,
+            estimated_wholesale=None,
             vintage=vintage,
-            source="catalog",
+            source="no_data",
             last_updated=datetime.now(timezone.utc),
-            data_confidence="low",
+            data_confidence="none",
         )
 
     # Filter consistently: only include records where the field is not None

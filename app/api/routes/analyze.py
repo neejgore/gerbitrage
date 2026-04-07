@@ -135,9 +135,18 @@ async def _run_analysis(
     # ── Build EffectivePricing (single canonical pricing object) ────────────
     effective: Optional[EffectivePricing] = None
 
-    if ident.matched and pricing:
-        # Path A: catalog hit → fully trusted reference price
+    if ident.matched and pricing and pricing.avg_retail is not None:
+        # Path A: catalog hit with real pricing data
         wine_name = ident.name or req.menu_text
+        # Map aggregator confidence to EffectivePricing levels
+        agg_conf = pricing.data_confidence or "low"
+        eff_conf: str = agg_conf if agg_conf in ("high", "medium", "low") else "low"
+        # Describe where the price came from
+        source_note = (
+            f"Matched '{wine_name}' in curated catalog "
+            f"(confidence {ident.confidence:.0%}). "
+            f"Price from: {pricing.source}."
+        )
         effective = EffectivePricing(
             avg_retail=pricing.avg_retail,
             min_retail=pricing.min_retail,
@@ -145,12 +154,9 @@ async def _run_analysis(
             estimated_wholesale=pricing.estimated_wholesale,
             price_tier=ident.price_tier,
             currency=pricing.currency,
-            price_source=PriceSource.catalog,
-            price_basis_note=(
-                f"Matched '{wine_name}' in curated catalog "
-                f"(confidence {ident.confidence:.0%})."
-            ),
-            data_confidence="high",
+            price_source=PriceSource.market_live if pricing.source != "no_data" else PriceSource.unavailable,
+            price_basis_note=source_note,
+            data_confidence=eff_conf,  # type: ignore[arg-type]
             last_updated=pricing.last_updated,
         )
 
