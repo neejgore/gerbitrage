@@ -140,9 +140,34 @@ def _aggregate(
     avgs = [r.avg_price for r in priced_results]
     weights = [r.num_listings or 1 for r in priced_results]
 
-    mins = [r.min_price for r in results if r.min_price is not None]
-    maxes = [r.max_price for r in results if r.max_price is not None]
-    medians = [r.median_price for r in results if r.median_price is not None]
+    # ── Outlier-source rejection ──────────────────────────────────────────────
+    # When one source is 4x+ higher than the median of all others AND it is
+    # Vivino (which pulls the actual listing price), the low sources are almost
+    # certainly matching the wrong wine (e.g. a $280 regional Burgundy instead
+    # of a $5,600 cult domaine bottle). In that case, trust Vivino and discard
+    # the low outliers rather than averaging them down.
+    if len(avgs) >= 2:
+        vivino_results = [r for r in priced_results if r.source == "Vivino"]
+        other_results  = [r for r in priced_results if r.source != "Vivino"]
+        if vivino_results and other_results:
+            vivino_avg = statistics.mean(r.avg_price for r in vivino_results)
+            other_avg  = statistics.mean(r.avg_price for r in other_results)
+            # If Vivino is 4x+ higher than the median of other sources,
+            # the other sources are likely mis-matched — drop them.
+            if vivino_avg > 0 and other_avg > 0 and vivino_avg / other_avg >= 4.0:
+                import logging
+                logging.getLogger(__name__).info(
+                    "Pricing outlier detected: Vivino $%.0f vs others avg $%.0f — "
+                    "trusting Vivino, discarding low sources",
+                    vivino_avg, other_avg,
+                )
+                priced_results = vivino_results
+                avgs    = [r.avg_price for r in priced_results]
+                weights = [r.num_listings or 1 for r in priced_results]
+
+    mins = [r.min_price for r in priced_results if r.min_price is not None]
+    maxes = [r.max_price for r in priced_results if r.max_price is not None]
+    medians = [r.median_price for r in priced_results if r.median_price is not None]
     total_listings = sum(r.num_listings or 0 for r in results)
 
     avg_retail = _weighted_mean(avgs, weights)

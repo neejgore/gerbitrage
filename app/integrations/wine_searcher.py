@@ -39,8 +39,10 @@ class WineSearcherProvider(BasePricingProvider):
         wine_id: Optional[str] = None,
     ) -> Optional[RawPricingResult]:
 
-        if settings.use_mock_pricing or not self.is_available():
+        if settings.use_mock_pricing:
             return self._mock(wine_id, vintage)
+        if not self.is_available():
+            return None  # No API key — don't fabricate data
 
         return await self._real(wine_name, producer, vintage)
 

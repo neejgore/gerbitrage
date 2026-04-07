@@ -108,13 +108,15 @@ class CellarTrackerMarketplaceProvider(BasePricingProvider):
         vintage: Optional[int] = None,
         wine_id: Optional[str] = None,
     ) -> Optional[RawPricingResult]:
-        if not self.is_available():
+        if settings.use_mock_pricing:
             return self._mock(wine_id, vintage)
+        if not self.is_available():
+            return None  # No credentials — don't fabricate data
 
         iwine = wine_id and _WINE_ID_MAP.get(wine_id)
         if not iwine:
             logger.debug("CTMarket: no iWine ID for '%s'", wine_id)
-            return self._mock(wine_id, vintage)
+            return None  # No ID mapping — skip rather than fabricate
 
         return await self._fetch_market_prices(iwine, wine_name, vintage)
 
