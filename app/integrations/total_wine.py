@@ -50,9 +50,6 @@ def _build_cookies() -> dict[str, str]:
                 cookies[k.strip()] = v.strip()
     return cookies
 
-_TOTAL_WINE_MARKUP = 1.05
-
-
 class TotalWineProvider(BasePricingProvider):
     name = "Total Wine"
     # Total Wine has PerimeterX — longer delays reduce challenge frequency

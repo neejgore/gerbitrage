@@ -484,7 +484,6 @@ _REGIONAL_PROXY: dict[str, tuple[float, float, float]] = {
     "emilia romagna":                       (15,  25,   65),
     "primitivo":                            (14,  24,   65),
     "salice salentino":                     (12,  20,   50),
-    "ciro":                                 (15,  25,   60),
     # ── Italy – Barbera / Dolcetto / Piedmont extras ──────────────────────
     "barbera":                              (18,  32,   80),
     "dolcetto":                             (15,  25,   60),

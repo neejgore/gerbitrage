@@ -235,7 +235,7 @@ _VARIETAL_KEYWORDS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\btxakoli\b|\btxakolina\b", re.IGNORECASE), "txakoli"),
     (re.compile(r"\bmonastrell\b|\bmourvedre\b|\bmouvèdre\b", re.IGNORECASE), "mourvedre"),
     # Rhône / Southern France
-    (re.compile(r"\bmarouvrèdre\b|\bmarsanne\b", re.IGNORECASE), "marsanne"),
+    (re.compile(r"\bmarsanne\b", re.IGNORECASE), "marsanne"),
     (re.compile(r"\broussanne\b", re.IGNORECASE), "roussanne"),
     (re.compile(r"\bcinsault\b|\bcinsaut\b", re.IGNORECASE), "cinsault"),
     (re.compile(r"\bcarignan\b|\bcariñena\b", re.IGNORECASE), "carignan"),

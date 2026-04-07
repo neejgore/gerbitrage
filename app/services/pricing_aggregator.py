@@ -10,7 +10,6 @@ Playwright search (~5 s) and saves the result so subsequent calls are instant.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import statistics
 from datetime import datetime, timezone

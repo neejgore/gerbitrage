@@ -26,11 +26,9 @@ from urllib.parse import quote_plus
 
 import httpx
 
-from app.config import get_settings
 from app.integrations.base import BasePricingProvider, RateLimiter, RawPricingResult
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 _SEARCH_URL = "https://www.benchmarkwine.com/search"
 
