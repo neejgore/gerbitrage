@@ -29,13 +29,22 @@ except Exception as e:
     print(f"  merge skipped ({e})")
     sys.exit(0)
 before = len(vol)
-vol.update({k: v for k, v in seed.items() if k not in vol})
+updated = 0
+for k, v in seed.items():
+    if k not in vol:
+        vol[k] = v
+    else:
+        seed_p = v.get("avg_price", 0) if isinstance(v, dict) else 0
+        vol_p  = vol[k].get("avg_price", 0) if isinstance(vol[k], dict) else 0
+        if seed_p and vol_p and abs(seed_p - vol_p) / max(vol_p, 1) > 0.01:
+            vol[k] = v
+            updated += 1
 added = len(vol) - before
-if added:
+if added or updated:
     open(dest_path, "w").write(json.dumps(vol, indent=2, ensure_ascii=False))
-    print(f"  merged +{added} entries from seed (total {len(vol)})")
+    print(f"  merged +{added} new, {updated} updated from seed (total {len(vol)})")
 else:
-    print(f"  no new entries from seed ({len(vol)} existing)")
+    print(f"  no changes from seed ({len(vol)} existing)")
 PYEOF
             fi
         else
