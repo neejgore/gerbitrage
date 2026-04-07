@@ -6384,14 +6384,14 @@
     "vivino_wine_id": "82698"
   },
   "bizot-echezeaux": {
-    "avg_price": 831.0,
+    "avg_price": 7871.0,
     "fetched_at": "2026-04-02T06:27:48.058428+00:00",
     "max_price": 955.65,
     "median_price": 831.0,
     "min_price": 706.35,
     "num_listings": 1,
-    "url": "https://www.vivino.com/en/millot-jean-marc-grands-echezeaux-grand-cru/w/3625248?year=2018&price_id=35035686",
-    "vivino_name": "Jean-Marc Millot",
+    "url": "https://www.vivino.com/en/domaine-bizot-echezeaux-grand-cru/w/1630135?year=1999&price_id=38921655",
+    "vivino_name": "Domaine Bizot",
     "vivino_rating": 4.5,
     "vivino_wine_id": "3625248"
   },
