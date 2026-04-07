@@ -35,8 +35,9 @@ import logging
 import random
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -158,12 +159,37 @@ async def main(args: argparse.Namespace) -> None:
     else:
         wines = list(WINE_CATALOG)
 
+    # ── Determine staleness cutoff ─────────────────────────────────────────────
+    stale_cutoff: Optional[datetime] = None
+    if args.max_age_days and args.max_age_days > 0:
+        from datetime import timezone
+        stale_cutoff = datetime.now(timezone.utc) - timedelta(days=args.max_age_days)
+        log.info("Refreshing entries older than %d days (before %s)",
+                 args.max_age_days, stale_cutoff.date())
+
+    def _is_fresh(cache_key: str) -> bool:
+        """Return True when entry exists and is within the max-age window."""
+        entry = cache.get(cache_key)
+        if not entry:
+            return False
+        if stale_cutoff is None:
+            return True  # --skip-known only, no age check
+        ts = entry.get("fetched_at") if isinstance(entry, dict) else None
+        if not ts:
+            return False  # no timestamp → treat as stale
+        try:
+            from datetime import timezone as _tz
+            fetched = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            return fetched >= stale_cutoff
+        except Exception:
+            return False
+
     # ── Build (wine, vintage) work items ──────────────────────────────────────
     work_items: list[tuple] = []
     for w in wines:
         for v in vintages:
             cache_key = f"{w.id}-{v}" if v else w.id
-            if args.skip_known and cache_key in cache:
+            if (args.skip_known or stale_cutoff) and _is_fresh(cache_key):
                 continue
             work_items.append((w, v))
 
@@ -232,7 +258,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--skip-known", action="store_true",
-        help="Skip entries that already have a cached price",
+        help="Skip entries that already have a cached price (regardless of age)",
+    )
+    parser.add_argument(
+        "--max-age-days", type=int, default=None, metavar="N",
+        help=(
+            "Refresh cached entries older than N days. "
+            "Supersedes --skip-known for stale entries. "
+            "Recommended: 14 for cult wines, 30 for fine wine, 60 for mid-tier."
+        ),
     )
     parser.add_argument(
         "--concurrency", type=int, default=1, metavar="N",

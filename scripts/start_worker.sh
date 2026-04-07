@@ -72,12 +72,36 @@ catalog_loop() {
 catalog_loop &
 
 # ── Vintage pricing loop (main loop) ─────────────────────────────────────────
-# Prices every wine × every vintage. Skips already-cached entries so it only
-# does new work each cycle (new wines added by catalog builder get priced here).
+# Cycle A (every run): price anything uncached — new wines from catalog builder
+# Cycle B (every 30 days): refresh fine wine prices (mid-tier and above)
+# Cycle C (every 14 days): refresh ultra/luxury cult wine prices
+CYCLE=0
 while true; do
-    echo "[worker] Running vintage matrix (skip-known)…"
+    CYCLE=$((CYCLE + 1))
+    echo "[worker] === Pricing cycle $CYCLE ==="
+
+    # Always: price anything not yet cached
+    echo "[worker] Cycle $CYCLE-A: pricing new/uncached entries…"
     python scripts/vivino_price_all.py --vintages all --skip-known
 
-    echo "[worker] Vintage cycle done. Sleeping 1 hour…"
+    # Every 3rd cycle (~3 hours apart = ~every 9 hours): refresh entries > 30 days
+    if [ $((CYCLE % 3)) -eq 0 ]; then
+        echo "[worker] Cycle $CYCLE-B: refreshing entries older than 30 days…"
+        python scripts/vivino_price_all.py --vintages all --max-age-days 30
+    fi
+
+    # Every 7th cycle (~every 21 hours): also refresh ultra-luxury entries > 14 days
+    if [ $((CYCLE % 7)) -eq 0 ]; then
+        echo "[worker] Cycle $CYCLE-C: refreshing ultra/luxury entries older than 14 days…"
+        python scripts/vivino_price_all.py \
+            --ids $(python3 -c "
+import sys; sys.path.insert(0,'.')
+from app.data.wine_catalog import WINE_CATALOG
+ids = [w.id for w in WINE_CATALOG if w.price_tier in ('ultra','luxury')]
+print(' '.join(ids))
+") --max-age-days 14
+    fi
+
+    echo "[worker] Pricing cycle $CYCLE done. Sleeping 1 hour…"
     sleep 3600
 done
