@@ -257,7 +257,7 @@ td.mc { font-weight: 600; font-variant-numeric: tabular-nums; }
 
   <div class="tabs">
     <button class="tab active" onclick="switchTab('search')">Search a wine</button>
-    <button class="tab" onclick="switchTab('upload')">Analyse a menu</button>
+    <button class="tab" onclick="switchTab('upload')">Analyze a menu</button>
   </div>
 
   <!-- ── SEARCH ── -->
@@ -476,7 +476,7 @@ let currentResults=[],currentFilter='all';
 
 async function uploadFile(file){
   const out=document.getElementById('uploadResult');
-  out.innerHTML=`<div class="loading" style="margin-top:24px"><div class="spinner"></div>Analysing menu — may take 15–30 seconds…</div>`;
+  out.innerHTML=`<div class="loading" style="margin-top:24px"><div class="spinner"></div>Analyzing menu — may take 15–30 seconds…</div>`;
   const form=new FormData();form.append('file',file);
   try{
     const res=await fetch('/menu/upload',{method:'POST',body:form});

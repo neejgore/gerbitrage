@@ -147,7 +147,7 @@ def _deal_rating(markup: Optional[float]) -> str:
 
 # ── Route ──────────────────────────────────────────────────────────────────────
 
-@router.post("/upload", response_model=MenuUploadResponse, summary="Analyse a wine menu file")
+@router.post("/upload", response_model=MenuUploadResponse, summary="Analyze a wine menu file")
 async def upload_menu(file: UploadFile = File(...)) -> MenuUploadResponse:
     """
     Upload a wine menu as a **PDF** or **image** (JPG / PNG / HEIC).
@@ -197,10 +197,10 @@ async def upload_menu(file: UploadFile = File(...)) -> MenuUploadResponse:
     # Limit to 150 entries to avoid timeout
     wines = wines[:150]
 
-    # Analyse concurrently (10 at a time)
+    # Analyze concurrently (10 at a time)
     sem = asyncio.Semaphore(10)
 
-    async def _analyse(w: dict) -> MenuWineResult:
+    async def _analyze(w: dict) -> MenuWineResult:
         async with sem:
             req = AnalyzeRequest(
                 menu_text=w["desc"],
@@ -245,7 +245,7 @@ async def upload_menu(file: UploadFile = File(...)) -> MenuUploadResponse:
             )
 
     results: list[MenuWineResult] = list(
-        await asyncio.gather(*[_analyse(w) for w in wines])
+        await asyncio.gather(*[_analyze(w) for w in wines])
     )
 
     return MenuUploadResponse(
