@@ -572,7 +572,7 @@ let currentResults=[],currentFilter='all';
 
 async function uploadFile(file){
   const out=document.getElementById('uploadResult');
-  out.innerHTML=`<div class="loading" style="margin-top:24px"><div class="spinner"></div>Analyzing menu — may take 15–30 seconds…</div>`;
+  out.innerHTML=`<div class="loading" style="margin-top:24px"><div class="spinner"></div>Analyzing menu — typically takes 1–2 minutes…</div>`;
   const form=new FormData();form.append('file',file);
   try{
     const res=await fetch('/menu/upload',{method:'POST',body:form});
@@ -589,7 +589,7 @@ async function analyzeUrl(){
   if(!url){urlInput.focus();return;}
   if(!url.startsWith('http')){showErr(document.getElementById('uploadResult'),'Please enter a full URL starting with https://');return;}
   const out=document.getElementById('uploadResult');
-  out.innerHTML=`<div class="loading" style="margin-top:24px"><div class="spinner"></div>Fetching and analyzing menu — may take 20–40 seconds…</div>`;
+  out.innerHTML=`<div class="loading" style="margin-top:24px"><div class="spinner"></div>Fetching and analyzing menu — typically takes 1–2 minutes…</div>`;
   try{
     const res=await fetch('/menu/from-url',{
       method:'POST',
