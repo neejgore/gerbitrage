@@ -216,6 +216,14 @@ main { max-width: 780px; margin: 0 auto; padding: 48px 24px 80px; }
 .drop-sub   { font-size: 13px; color: var(--muted); }
 .drop-sub a { color: var(--accent); cursor: pointer; }
 
+/* ── URL input row ───────────────────────────────────────────────────────── */
+.or-divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--muted); font-size: 12px; }
+.or-divider::before, .or-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.url-row { display: flex; gap: 8px; }
+.url-row input { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 11px 14px; color: var(--text); font-size: 14px; font-family: inherit; outline: none; transition: border-color .15s; }
+.url-row input:focus { border-color: var(--accent); }
+.url-row input::placeholder { color: var(--muted); }
+
 /* ── Stats row ────────────────────────────────────────────────────────────── */
 .stats-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px; }
 @media (max-width: 600px) { .stats-row { grid-template-columns: repeat(3,1fr); } }
@@ -311,6 +319,15 @@ td.mc { font-weight: 600; font-variant-numeric: tabular-nums; }
       <div class="drop-title">Drop a wine menu here</div>
       <div class="drop-sub">PDF or photo (JPG, PNG, HEIC) · <a>click to browse</a></div>
     </div>
+
+    <div class="or-divider">or paste a URL</div>
+
+    <div class="url-row">
+      <input id="menuUrl" type="url" placeholder="https://restaurant.com/wine-list.pdf  or  https://restaurant.com/wines"
+             onkeydown="if(event.key==='Enter')analyzeUrl()">
+      <button class="btn" onclick="analyzeUrl()">Analyze →</button>
+    </div>
+
     <div id="uploadResult"></div>
   </div>
 </main>
@@ -564,6 +581,26 @@ async function uploadFile(file){
     currentResults=data.results||[];currentFilter='all';
     renderUpload(out,data);
   }catch(e){showErr(out,'Upload failed — '+e.message);}
+}
+
+async function analyzeUrl(){
+  const urlInput=document.getElementById('menuUrl');
+  const url=urlInput.value.trim();
+  if(!url){urlInput.focus();return;}
+  if(!url.startsWith('http')){showErr(document.getElementById('uploadResult'),'Please enter a full URL starting with https://');return;}
+  const out=document.getElementById('uploadResult');
+  out.innerHTML=`<div class="loading" style="margin-top:24px"><div class="spinner"></div>Fetching and analyzing menu — may take 20–40 seconds…</div>`;
+  try{
+    const res=await fetch('/menu/from-url',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({url})
+    });
+    const data=await res.json();
+    if(!res.ok){showErr(out,data.detail||'Server error');return;}
+    currentResults=data.results||[];currentFilter='all';
+    renderUpload(out,data);
+  }catch(e){showErr(out,'Request failed — '+e.message);}
 }
 
 function renderUpload(out,data){
