@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import admin, analyze, pricing, search
+from app.api.routes import admin, analyze, menu_upload, pricing, search
 from app.config import get_settings
 from app.services.cache import close_cache, init_cache
 from app.services.scheduler import start_scheduler, stop_scheduler
@@ -95,7 +95,12 @@ def create_app() -> FastAPI:
     async def health():
         return {"status": "ok", "version": settings.app_version}
 
-    # ── Dashboard ─────────────────────────────────────────────────────────────
+    # ── Main SPA (public-facing wine tool) ───────────────────────────────────
+    @app.get("/", tags=["Meta"], include_in_schema=False)
+    async def root():
+        return FileResponse(_STATIC_DIR / "app.html")
+
+    # ── Admin dashboard ───────────────────────────────────────────────────────
     @app.get("/dashboard", tags=["Meta"], summary="Wine Intelligence Dashboard", include_in_schema=False)
     async def dashboard():
         return FileResponse(_STATIC_DIR / "dashboard.html")
@@ -105,6 +110,7 @@ def create_app() -> FastAPI:
     app.include_router(search.router)
     app.include_router(pricing.router)
     app.include_router(admin.router)
+    app.include_router(menu_upload.router)
 
     # ── Static files (dashboard assets) ──────────────────────────────────────
     if _STATIC_DIR.exists():
