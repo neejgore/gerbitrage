@@ -291,7 +291,7 @@ td.mc { font-weight: 600; font-variant-numeric: tabular-nums; }
     <div class="search-row">
       <div class="ac-wrap">
         <input class="search-input" id="searchInput" type="text"
-               placeholder="Producer, wine name, region, vintage…"
+               placeholder="Wine name or producer (e.g. &quot;Opus One 2019&quot;)"
                autocomplete="off" spellcheck="false"
                oninput="onSearchInput()"
                onkeydown="handleSearchKey(event)">
@@ -303,7 +303,7 @@ td.mc { font-weight: 600; font-variant-numeric: tabular-nums; }
       </select>
       <button class="btn" id="searchBtn" onclick="doSearch()">Search</button>
     </div>
-    <p class="search-hint">Try "Opus One 2019" or "Kosta Browne Russian River" — autocomplete will suggest as you type.</p>
+    <p class="search-hint">Search by wine name or producer — autocomplete will suggest matches as you type.</p>
     <div id="searchResult"></div>
   </div>
 
