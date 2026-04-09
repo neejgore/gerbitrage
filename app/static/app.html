@@ -3,251 +3,269 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gerbitrage — Wine Pricing Intelligence</title>
+<title>Gerbitrage</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  :root {
-    --bg:         #0d0d1a;
-    --surface:    #16162a;
-    --border:     #2a2a45;
-    --wine:       #8b1a2e;
-    --wine-light: #a8243f;
-    --gold:       #c9a84c;
-    --text:       #f0ede8;
-    --muted:      #9090a8;
-    --radius:     12px;
-  }
+:root {
+  --bg:       #0f0f13;
+  --surface:  #18181f;
+  --card:     #1e1e28;
+  --border:   #2a2a38;
+  --accent:   #7c6af7;
+  --accent-d: rgba(124,106,247,.12);
+  --green:    #3ecf8e;
+  --green-d:  rgba(62,207,142,.12);
+  --red:      #e85d5d;
+  --red-d:    rgba(232,93,93,.12);
+  --amber:    #e8a23e;
+  --amber-d:  rgba(232,162,62,.12);
+  --text:     #e8e8f0;
+  --muted:    #6e6e8a;
+  --radius:   10px;
+  font-family: 'Inter', system-ui, sans-serif;
+}
 
-  html { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+html, body { min-height: 100vh; background: var(--bg); color: var(--text); }
 
-  /* ── Header ── */
-  header {
-    background: linear-gradient(135deg, #0d0d1a 0%, #1a0a14 50%, #0d0d1a 100%);
-    border-bottom: 1px solid var(--border);
-    padding: 18px 24px;
-    display: flex; align-items: center; justify-content: space-between;
-  }
-  .logo { display: flex; align-items: center; gap: 12px; text-decoration: none; }
-  .logo-icon { width: 36px; height: 36px; background: var(--wine); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
-  .logo-text { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; color: var(--gold); letter-spacing: 0.02em; }
-  .logo-sub { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 1px; }
-  .header-link { font-size: 13px; color: var(--muted); text-decoration: none; border: 1px solid var(--border); padding: 6px 14px; border-radius: 6px; transition: all .15s; }
-  .header-link:hover { color: var(--text); border-color: var(--muted); }
+/* ── Header ───────────────────────────────────────────────────────────────── */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 32px; border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.logo { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; color: var(--text); }
+.logo span { color: var(--accent); }
+.live-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 13px; border-radius: 20px;
+  font-size: 12px; font-weight: 600;
+  background: var(--accent-d); color: var(--accent);
+}
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
 
-  /* ── Main ── */
-  main { max-width: 860px; margin: 0 auto; padding: 40px 20px 80px; }
-  h1 { font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
-  .subtitle { font-size: 16px; color: var(--muted); margin-bottom: 32px; font-weight: 300; }
+/* ── Layout ───────────────────────────────────────────────────────────────── */
+main { max-width: 780px; margin: 0 auto; padding: 48px 24px 80px; }
 
-  /* ── Tabs ── */
-  .tabs { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-bottom: 28px; width: fit-content; }
-  .tab { padding: 9px 22px; border-radius: 7px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all .15s; color: var(--muted); border: none; background: none; }
-  .tab.active { background: var(--wine); color: #fff; }
-  .tab:not(.active):hover { color: var(--text); background: var(--border); }
+/* ── Intro ────────────────────────────────────────────────────────────────── */
+.intro { margin-bottom: 36px; }
+.intro h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 6px; }
+.intro p  { font-size: 15px; color: var(--muted); font-weight: 400; }
 
-  /* ── Panels ── */
-  .panel { display: none; }
-  .panel.active { display: block; }
+/* ── Tabs ─────────────────────────────────────────────────────────────────── */
+.tabs {
+  display: inline-flex; gap: 2px; padding: 3px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 9px;
+  margin-bottom: 28px;
+}
+.tab {
+  padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 500;
+  border: none; background: none; color: var(--muted); cursor: pointer; transition: all .15s;
+}
+.tab.active { background: var(--accent); color: #fff; }
+.tab:not(.active):hover { color: var(--text); }
 
-  /* ── Search row ── */
-  .search-row { display: flex; gap: 10px; margin-bottom: 12px; }
+/* ── Panels ───────────────────────────────────────────────────────────────── */
+.panel { display: none; }
+.panel.active { display: block; }
 
-  /* ── Autocomplete wrapper ── */
-  .ac-wrap { position: relative; flex: 1; }
-  .search-input {
-    width: 100%; padding: 14px 18px; border-radius: var(--radius);
-    background: var(--surface); border: 1px solid var(--border); color: var(--text);
-    font-size: 15px; font-family: 'Inter', sans-serif; outline: none; transition: border-color .15s;
-  }
-  .search-input::placeholder { color: var(--muted); }
-  .search-input:focus { border-color: var(--gold); }
-  .search-input.ac-open { border-radius: var(--radius) var(--radius) 0 0; border-bottom-color: var(--gold); }
+/* ── Search row ───────────────────────────────────────────────────────────── */
+.search-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.ac-wrap { position: relative; flex: 1; }
 
-  /* ── Autocomplete dropdown ── */
-  .ac-dropdown {
-    display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 200;
-    background: var(--surface); border: 1px solid var(--gold); border-top: none;
-    border-radius: 0 0 var(--radius) var(--radius);
-    box-shadow: 0 12px 32px rgba(0,0,0,0.6);
-    max-height: 320px; overflow-y: auto;
-  }
-  .ac-dropdown.visible { display: block; }
-  .ac-item {
-    padding: 11px 16px; cursor: pointer; border-bottom: 1px solid var(--border);
-    transition: background .1s;
-  }
-  .ac-item:last-child { border-bottom: none; }
-  .ac-item:hover, .ac-item.active { background: rgba(139,26,46,0.25); }
-  .ac-name { font-size: 14px; font-weight: 500; color: var(--text); display: flex; align-items: center; justify-content: space-between; }
-  .ac-price { font-size: 13px; color: var(--gold); font-weight: 600; }
-  .ac-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.search-input {
+  width: 100%; padding: 13px 16px; border-radius: var(--radius);
+  background: var(--card); border: 1px solid var(--border); color: var(--text);
+  font-size: 15px; font-family: inherit; outline: none; transition: border-color .15s;
+}
+.search-input::placeholder { color: var(--muted); }
+.search-input:focus { border-color: var(--accent); }
+.search-input.ac-open { border-radius: var(--radius) var(--radius) 0 0; border-bottom-color: var(--accent); }
 
-  /* ── Controls ── */
-  .vintage-select {
-    padding: 14px 14px; border-radius: var(--radius);
-    background: var(--surface); border: 1px solid var(--border); color: var(--text);
-    font-size: 14px; cursor: pointer; outline: none; flex-shrink: 0;
-  }
-  .btn-primary {
-    padding: 14px 26px; border-radius: var(--radius); background: var(--wine);
-    color: #fff; font-size: 14px; font-weight: 600; border: none; cursor: pointer;
-    transition: background .15s; white-space: nowrap; letter-spacing: 0.02em; flex-shrink: 0;
-  }
-  .btn-primary:hover { background: var(--wine-light); }
-  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-  .hint { font-size: 12px; color: var(--muted); margin-bottom: 24px; }
+/* ── Autocomplete ─────────────────────────────────────────────────────────── */
+.ac-dropdown {
+  display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 200;
+  background: var(--card); border: 1px solid var(--accent); border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: 0 16px 40px rgba(0,0,0,.7); max-height: 300px; overflow-y: auto;
+}
+.ac-dropdown.visible { display: block; }
+.ac-item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border); transition: background .1s; }
+.ac-item:last-child { border-bottom: none; }
+.ac-item:hover, .ac-item.active { background: var(--accent-d); }
+.ac-name { font-size: 14px; font-weight: 500; display: flex; align-items: center; justify-content: space-between; }
+.ac-price { font-size: 13px; color: var(--green); font-weight: 600; }
+.ac-sub  { font-size: 11px; color: var(--muted); margin-top: 3px; }
 
-  /* ── Vivino button ── */
-  .vivino-btn {
-    display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
-    background: #ac1e27; color: #fff; padding: 10px 20px; border-radius: 8px;
-    font-size: 13px; font-weight: 600; transition: background .15s; border: none; cursor: pointer;
-  }
-  .vivino-btn:hover { background: #c22530; }
-  .vivino-btn svg { flex-shrink: 0; }
+/* ── Controls ─────────────────────────────────────────────────────────────── */
+.vintage-select {
+  padding: 13px 12px; border-radius: var(--radius);
+  background: var(--card); border: 1px solid var(--border); color: var(--text);
+  font-size: 13px; cursor: pointer; outline: none; flex-shrink: 0;
+}
+.btn {
+  padding: 13px 22px; border-radius: var(--radius); background: var(--accent);
+  color: #fff; font-size: 14px; font-weight: 600; border: none; cursor: pointer;
+  transition: opacity .15s; white-space: nowrap; flex-shrink: 0;
+}
+.btn:hover { opacity: .85; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.search-hint { font-size: 12px; color: var(--muted); margin-bottom: 24px; }
 
-  /* ── Result card ── */
-  .result-card {
-    background: #ffffff; border-radius: var(--radius); overflow: hidden;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.4); color: #111;
-  }
-  .result-card-header {
-    padding: 22px 24px 18px; border-bottom: 1px solid #e5e7eb;
-    background: linear-gradient(135deg, #faf9f7 0%, #f5f0ea 100%);
-  }
-  .result-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-  .result-wine-name { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; color: #111; line-height: 1.2; }
-  .result-producer { font-size: 14px; color: #555; margin-top: 4px; }
-  .conf-badge { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; white-space: nowrap; flex-shrink: 0; letter-spacing: 0.04em; text-transform: uppercase; }
-  .conf-very_high, .conf-high { background: #dcfce7; color: #15803d; }
-  .conf-medium { background: #fef9c3; color: #854d0e; }
-  .conf-low, .conf-none { background: #fee2e2; color: #991b1b; }
-  .result-meta { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
-  .meta-tag { font-size: 12px; background: #f3f0eb; color: #555; padding: 3px 10px; border-radius: 20px; border: 1px solid #e0d9cf; }
+/* ── Result card (dark) ───────────────────────────────────────────────────── */
+.result-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden;
+}
+.rc-header { padding: 20px 22px 16px; border-bottom: 1px solid var(--border); }
+.rc-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.rc-name { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; color: var(--text); line-height: 1.2; }
+.rc-producer { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.rc-tags { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.tag {
+  font-size: 11px; padding: 3px 9px; border-radius: 4px;
+  background: rgba(255,255,255,.04); border: 1px solid var(--border); color: var(--muted);
+}
 
-  .result-pricing { display: grid; grid-template-columns: 1fr 1fr; }
-  .price-block { padding: 20px 24px; }
-  .price-block:first-child { border-right: 1px solid #e5e7eb; }
-  .price-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #777; margin-bottom: 6px; }
-  .price-value { font-size: 32px; font-weight: 700; font-family: 'Playfair Display', serif; color: #111; }
-  .price-range { font-size: 12px; color: #888; margin-top: 4px; }
-  .price-note { font-size: 11px; color: #aaa; margin-top: 6px; font-style: italic; }
+.conf-badge {
+  font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 4px;
+  white-space: nowrap; flex-shrink: 0; letter-spacing: 0.05em; text-transform: uppercase;
+}
+.conf-very_high, .conf-high { background: var(--green-d); color: var(--green); }
+.conf-medium  { background: var(--amber-d); color: var(--amber); }
+.conf-low, .conf-none { background: var(--red-d); color: var(--red); }
 
-  .result-footer { padding: 14px 24px; background: #f9fafb; border-top: 1px solid #e5e7eb; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  .footer-item { font-size: 12px; color: #666; }
-  .footer-item strong { color: #333; }
-  .footer-vivino { margin-left: auto; }
+/* ── Pricing grid ─────────────────────────────────────────────────────────── */
+.rc-prices { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--border); }
+.price-col { padding: 18px 22px; }
+.price-col:first-child { border-right: 1px solid var(--border); }
+.price-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 8px; }
+.price-value { font-size: 34px; font-weight: 700; color: var(--text); letter-spacing: -1px; }
+.price-value.green { color: var(--green); }
+.price-range { font-size: 12px; color: var(--muted); margin-top: 5px; }
 
-  .no-price-notice { padding: 20px 24px; background: #fffbeb; border-top: 1px solid #fde68a; font-size: 13px; color: #854d0e; }
+/* ── Result footer ────────────────────────────────────────────────────────── */
+.rc-footer {
+  padding: 12px 22px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  font-size: 12px; color: var(--muted);
+}
+.rc-footer strong { color: var(--text); }
+.rc-footer-right { margin-left: auto; }
+.vivino-btn {
+  display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
+  padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  background: rgba(255,255,255,.05); border: 1px solid var(--border); color: var(--text);
+  transition: border-color .15s, background .15s;
+}
+.vivino-btn:hover { border-color: var(--accent); background: var(--accent-d); color: var(--accent); }
 
-  /* ── Not-found state ── */
-  .not-found {
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 40px 28px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center;
-  }
-  .not-found-icon { font-size: 36px; }
-  .not-found-title { font-size: 17px; font-weight: 500; color: var(--text); }
-  .not-found-sub { font-size: 13px; color: var(--muted); max-width: 380px; line-height: 1.5; }
-  .not-found-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+/* ── No-price notice ──────────────────────────────────────────────────────── */
+.no-price {
+  padding: 16px 22px; background: var(--amber-d); border-top: 1px solid rgba(232,162,62,.2);
+  font-size: 13px; color: var(--amber);
+}
 
-  /* ── Upload ── */
-  .drop-zone {
-    border: 2px dashed var(--border); border-radius: var(--radius); padding: 52px 24px;
-    text-align: center; cursor: pointer; transition: all .2s; background: var(--surface); position: relative;
-  }
-  .drop-zone.drag-over { border-color: var(--gold); background: #1e1c2a; }
-  .drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-  .drop-icon { font-size: 40px; margin-bottom: 14px; }
-  .drop-title { font-size: 17px; font-weight: 500; color: var(--text); margin-bottom: 6px; }
-  .drop-sub { font-size: 13px; color: var(--muted); }
-  .drop-link { color: var(--gold); text-decoration: underline; cursor: pointer; }
+/* ── Not-found state ──────────────────────────────────────────────────────── */
+.not-found {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 40px 28px; display: flex; flex-direction: column; align-items: center;
+  gap: 12px; text-align: center;
+}
+.not-found-title { font-size: 16px; font-weight: 600; color: var(--text); }
+.not-found-sub   { font-size: 13px; color: var(--muted); max-width: 360px; line-height: 1.6; }
 
-  /* ── Loading ── */
-  .loading { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 40px; color: var(--muted); font-size: 14px; }
-  .spinner { width: 22px; height: 22px; border: 2px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin .7s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
+/* ── Loading spinner ──────────────────────────────────────────────────────── */
+.loading { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 48px; color: var(--muted); font-size: 13px; }
+.spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ── Summary stats ── */
-  .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 24px; }
-  @media (max-width: 600px) { .stats-grid { grid-template-columns: repeat(3, 1fr); } }
-  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 12px; text-align: center; }
-  .stat-num { font-size: 28px; font-weight: 700; font-family: 'Playfair Display', serif; }
-  .stat-label { font-size: 11px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
-  .stat-card.green .stat-num { color: #4ade80; }
-  .stat-card.amber .stat-num { color: #fbbf24; }
-  .stat-card.red .stat-num   { color: #f87171; }
+/* ── Error ────────────────────────────────────────────────────────────────── */
+.error-box { background: var(--red-d); border: 1px solid rgba(232,93,93,.3); border-radius: var(--radius); padding: 14px 18px; color: var(--red); font-size: 13px; display: flex; gap: 10px; }
 
-  /* ── Filter pills ── */
-  .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-  .filter-btn { padding: 7px 16px; border-radius: 20px; font-size: 13px; font-weight: 500; border: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; transition: all .15s; }
-  .filter-btn.active { background: var(--wine); color: #fff; border-color: var(--wine); }
-  .filter-btn:not(.active):hover { color: var(--text); border-color: var(--muted); }
+/* ── Upload zone ──────────────────────────────────────────────────────────── */
+.drop-zone {
+  border: 1px dashed var(--border); border-radius: var(--radius); padding: 52px 24px;
+  text-align: center; cursor: pointer; transition: all .2s; background: var(--card);
+  position: relative;
+}
+.drop-zone.drag-over { border-color: var(--accent); background: rgba(124,106,247,.06); }
+.drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.drop-icon  { font-size: 32px; margin-bottom: 12px; }
+.drop-title { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 5px; }
+.drop-sub   { font-size: 13px; color: var(--muted); }
+.drop-sub a { color: var(--accent); cursor: pointer; }
 
-  /* ── Results table ── */
-  .results-wrap { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); background: var(--surface); }
-  .results-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .results-table th { background: #1a1a2e; padding: 11px 14px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); border-bottom: 1px solid var(--border); }
-  .results-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
-  .results-table tr:last-child td { border-bottom: none; }
-  .results-table tr:hover td { background: rgba(255,255,255,0.03); }
-  .wine-cell { max-width: 220px; }
-  .wine-name { font-weight: 500; color: var(--text); line-height: 1.3; }
-  .wine-producer { font-size: 11px; color: var(--muted); margin-top: 2px; }
-  .deal-badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; white-space: nowrap; }
-  .deal-steal    { background: #052e16; color: #4ade80; border: 1px solid #15803d; }
-  .deal-good     { background: #052e16; color: #86efac; border: 1px solid #166534; }
-  .deal-fair     { background: #451a03; color: #fbbf24; border: 1px solid #b45309; }
-  .deal-expensive{ background: #450a0a; color: #f87171; border: 1px solid #991b1b; }
-  .deal-unknown  { background: #1e1e2e; color: var(--muted); border: 1px solid var(--border); }
-  .unmatched-row td { opacity: 0.5; }
-  td.markup-cell { font-weight: 600; font-variant-numeric: tabular-nums; }
+/* ── Stats row ────────────────────────────────────────────────────────────── */
+.stats-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px; }
+@media (max-width: 600px) { .stats-row { grid-template-columns: repeat(3,1fr); } }
+.stat { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 12px; text-align: center; }
+.stat-n { font-size: 26px; font-weight: 700; }
+.stat-l { font-size: 10px; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: .06em; }
+.stat.g .stat-n { color: var(--green); }
+.stat.a .stat-n { color: var(--amber); }
+.stat.r .stat-n { color: var(--red); }
 
-  /* ── Error ── */
-  .error-box { background: #450a0a; border: 1px solid #991b1b; border-radius: var(--radius); padding: 16px 20px; color: #fca5a5; font-size: 14px; display: flex; gap: 10px; align-items: flex-start; }
-  .empty-state { text-align: center; padding: 60px 24px; color: var(--muted); font-size: 14px; }
+/* ── Filter pills ─────────────────────────────────────────────────────────── */
+.filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.filter-btn { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 500; border: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; transition: all .15s; }
+.filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.filter-btn:not(.active):hover { color: var(--text); border-color: var(--muted); }
 
-  /* ── Responsive ── */
-  @media (max-width: 600px) {
-    h1 { font-size: 24px; }
-    .search-row { flex-direction: column; }
-    .result-pricing { grid-template-columns: 1fr; }
-    .price-block:first-child { border-right: none; border-bottom: 1px solid #e5e7eb; }
-    .results-table th:nth-child(3), .results-table td:nth-child(3),
-    .results-table th:nth-child(5), .results-table td:nth-child(5) { display: none; }
-  }
+/* ── Results table ────────────────────────────────────────────────────────── */
+.tbl-wrap { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
+.res-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.res-tbl th { background: var(--surface); padding: 10px 14px; text-align: left; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); border-bottom: 1px solid var(--border); }
+.res-tbl td { padding: 11px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+.res-tbl tr:last-child td { border-bottom: none; }
+.res-tbl tr:hover td { background: rgba(255,255,255,.02); }
+.wn { font-weight: 500; line-height: 1.3; }
+.wp { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.dim td { opacity: .45; }
+.badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
+.b-steal    { background: var(--green-d); color: var(--green); }
+.b-good     { background: var(--green-d); color: #6ee7b7; }
+.b-fair     { background: var(--amber-d); color: var(--amber); }
+.b-expensive{ background: var(--red-d);   color: var(--red);   }
+.b-unknown  { background: rgba(255,255,255,.04); color: var(--muted); }
+td.mc { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .search-row { flex-direction: column; }
+  .rc-prices  { grid-template-columns: 1fr; }
+  .price-col:first-child { border-right: none; border-bottom: 1px solid var(--border); }
+  .res-tbl th:nth-child(3), .res-tbl td:nth-child(3),
+  .res-tbl th:nth-child(5), .res-tbl td:nth-child(5) { display: none; }
+}
 </style>
 </head>
 <body>
 
 <header>
-  <a href="/" class="logo">
-    <div class="logo-icon">🍷</div>
-    <div>
-      <div class="logo-text">Gerbitrage</div>
-      <div class="logo-sub">Wine Pricing Intelligence</div>
-    </div>
-  </a>
-  <a href="/dashboard" class="header-link">Admin Dashboard →</a>
+  <div class="logo">ger<span>bitrage</span></div>
+  <div class="live-pill"><span class="dot"></span> Live pricing</div>
 </header>
 
 <main>
-  <h1>Know what wine is worth.</h1>
-  <p class="subtitle">Search any wine for retail &amp; wholesale pricing, or upload a menu to find the best deals.</p>
-
-  <div class="tabs">
-    <button class="tab active" onclick="switchTab('search')">🔍&nbsp; Search a Wine</button>
-    <button class="tab" onclick="switchTab('upload')">📄&nbsp; Analyse a Menu</button>
+  <div class="intro">
+    <h1>Know what wine is worth.</h1>
+    <p>Search any bottle for retail &amp; wholesale pricing, or upload a menu to find the deals.</p>
   </div>
 
-  <!-- ── SEARCH PANEL ── -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('search')">Search a wine</button>
+    <button class="tab" onclick="switchTab('upload')">Analyse a menu</button>
+  </div>
+
+  <!-- ── SEARCH ── -->
   <div class="panel active" id="panel-search">
     <div class="search-row">
       <div class="ac-wrap">
         <input class="search-input" id="searchInput" type="text"
-               placeholder="e.g. Opus One 2018, Krug Grande Cuvée, Failla Sonoma Coast…"
+               placeholder="Producer, wine name, region, vintage…"
                autocomplete="off" spellcheck="false"
                oninput="onSearchInput()"
                onkeydown="handleSearchKey(event)">
@@ -257,86 +275,81 @@
         <option value="">Any vintage</option>
         <script>for(let y=2024;y>=1990;y--) document.write(`<option value="${y}">${y}</option>`);</script>
       </select>
-      <button class="btn-primary" id="searchBtn" onclick="doSearch()">Search</button>
+      <button class="btn" id="searchBtn" onclick="doSearch()">Search</button>
     </div>
-    <p class="hint">Enter producer name, wine name, region, or any combination.</p>
+    <p class="search-hint">Try "Opus One 2019" or "Kosta Browne Russian River" — autocomplete will suggest as you type.</p>
     <div id="searchResult"></div>
   </div>
 
-  <!-- ── UPLOAD PANEL ── -->
+  <!-- ── UPLOAD ── -->
   <div class="panel" id="panel-upload">
     <div class="drop-zone" id="dropZone"
-         ondragover="event.preventDefault(); this.classList.add('drag-over')"
+         ondragover="event.preventDefault();this.classList.add('drag-over')"
          ondragleave="this.classList.remove('drag-over')"
          ondrop="handleDrop(event)">
       <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic"
              onchange="handleFileSelect(event)">
       <div class="drop-icon">📄</div>
       <div class="drop-title">Drop a wine menu here</div>
-      <div class="drop-sub">PDF or photo (JPG, PNG, HEIC) · <span class="drop-link">click to browse</span></div>
+      <div class="drop-sub">PDF or photo (JPG, PNG, HEIC) · <a>click to browse</a></div>
     </div>
     <div id="uploadResult"></div>
   </div>
 </main>
 
 <script>
-// ── Tab switching ─────────────────────────────────────────────────────────────
-function switchTab(name) {
-  document.querySelectorAll('.tab').forEach((t,i) =>
-    t.classList.toggle('active', (i===0&&name==='search')||(i===1&&name==='upload'))
-  );
-  document.getElementById('panel-search').classList.toggle('active', name==='search');
-  document.getElementById('panel-upload').classList.toggle('active', name==='upload');
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function switchTab(n){
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',(i===0&&n==='search')||(i===1&&n==='upload')));
+  document.getElementById('panel-search').classList.toggle('active',n==='search');
+  document.getElementById('panel-upload').classList.toggle('active',n==='upload');
 }
 
 // ── Formatters ────────────────────────────────────────────────────────────────
-const fmt = v => v==null ? '—' : '$'+v.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
+const fmt = v=>v==null?'—':'$'+v.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
 
-function confLabel(cl) {
-  return {very_high:'Very High',high:'High',medium:'Medium',low:'Low',none:'None'}[cl] || cl || '—';
+function confLabel(cl){return{very_high:'Very High',high:'High',medium:'Medium',low:'Low',none:'None'}[cl]||cl||'—';}
+
+function dealBadge(r){
+  const m={steal:['b-steal','STEAL'],good:['b-good','DEAL'],fair:['b-fair','FAIR'],expensive:['b-expensive','PRICEY'],unknown:['b-unknown','—']};
+  const[c,l]=m[r]||m.unknown; return`<span class="badge ${c}">${l}</span>`;
 }
-function dealBadge(r) {
-  const m={steal:['deal-steal','STEAL'],good:['deal-good','DEAL'],fair:['deal-fair','FAIR'],expensive:['deal-expensive','PRICEY'],unknown:['deal-unknown','—']};
-  const [c,l]=m[r]||m.unknown; return `<span class="deal-badge ${c}">${l}</span>`;
-}
-function showError(el,msg){ el.innerHTML=`<div class="error-box"><span>⚠️</span><span>${msg}</span></div>`; }
-function vivinoURL(q){ return `https://www.vivino.com/search/wines?q=${encodeURIComponent(q)}`; }
+
+function showErr(el,msg){el.innerHTML=`<div class="error-box">⚠️ ${msg}</div>`;}
+
+function vivinoURL(q){return`https://www.vivino.com/search/wines?q=${encodeURIComponent(q)}`;}
 function vivinoBtn(q,label='Search on Vivino'){
-  return `<a href="${vivinoURL(q)}" target="_blank" rel="noopener" class="vivino-btn">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
-    ${label} →
-  </a>`;
+  return`<a href="${vivinoURL(q)}" target="_blank" rel="noopener" class="vivino-btn">↗ ${label}</a>`;
 }
 
 // ── Autocomplete ──────────────────────────────────────────────────────────────
-let _acItems=[], _acIdx=-1, _acTimer=null;
+let _acItems=[],_acIdx=-1,_acTimer=null;
 
-function onSearchInput() {
-  const q = document.getElementById('searchInput').value.trim();
+function onSearchInput(){
+  const q=document.getElementById('searchInput').value.trim();
   clearTimeout(_acTimer);
-  if (q.length < 2) { hideAc(); return; }
-  _acTimer = setTimeout(() => fetchAc(q), 260);
+  if(q.length<2){hideAc();return;}
+  _acTimer=setTimeout(()=>fetchAc(q),260);
 }
 
-async function fetchAc(q) {
-  try {
-    const res = await fetch(`/search?q=${encodeURIComponent(q)}&limit=7`);
-    if (!res.ok) return;
-    const data = await res.json();
-    _acItems = (data.results || []).filter(r => r.match_score > 0.35);
+async function fetchAc(q){
+  try{
+    const r=await fetch(`/search?q=${encodeURIComponent(q)}&limit=7`);
+    if(!r.ok)return;
+    const d=await r.json();
+    _acItems=(d.results||[]).filter(r=>r.match_score>0.35);
     renderAc();
-  } catch(e) {}
+  }catch(e){}
 }
 
-function renderAc() {
-  const drop = document.getElementById('acDropdown');
-  const inp  = document.getElementById('searchInput');
-  if (!_acItems.length) { hideAc(); return; }
-  _acIdx = -1;
-  drop.innerHTML = _acItems.map((r,i) => {
-    const sub = [r.producer, r.region, r.varietal].filter(Boolean).join(' · ');
-    const price = r.avg_retail_price ? `<span class="ac-price">${fmt(r.avg_retail_price)}</span>` : '';
-    return `<div class="ac-item" data-idx="${i}" onmousedown="pickAc(${i})">
+function renderAc(){
+  const drop=document.getElementById('acDropdown'),inp=document.getElementById('searchInput');
+  if(!_acItems.length){hideAc();return;}
+  _acIdx=-1;
+  drop.innerHTML=_acItems.map((r,i)=>{
+    const sub=[r.producer,r.region,r.varietal].filter(Boolean).join(' · ');
+    const price=r.avg_retail_price?`<span class="ac-price">${fmt(r.avg_retail_price)}</span>`:'';
+    return`<div class="ac-item" data-idx="${i}" onmousedown="pickAc(${i})">
       <div class="ac-name">${r.name} ${price}</div>
       ${sub?`<div class="ac-sub">${sub}</div>`:''}
     </div>`;
@@ -345,211 +358,158 @@ function renderAc() {
   inp.classList.add('ac-open');
 }
 
-function hideAc() {
+function hideAc(){
   document.getElementById('acDropdown').classList.remove('visible');
   document.getElementById('searchInput').classList.remove('ac-open');
-  _acIdx = -1;
+  _acIdx=-1;
 }
 
-function pickAc(idx) {
-  const item = _acItems[idx];
-  if (!item) return;
-  // Build a sensible query string: "Producer WineName" if producer not already in name
-  const inp = document.getElementById('searchInput');
-  const nameLow = item.name.toLowerCase();
-  const prodLow = (item.producer||'').toLowerCase();
-  inp.value = (item.producer && !nameLow.includes(prodLow))
-    ? `${item.producer} ${item.name}`
-    : item.name;
+function pickAc(idx){
+  const item=_acItems[idx]; if(!item)return;
+  const inp=document.getElementById('searchInput');
+  const nl=item.name.toLowerCase(),pl=(item.producer||'').toLowerCase();
+  inp.value=(item.producer&&!nl.includes(pl))?`${item.producer} ${item.name}`:item.name;
+  hideAc(); doSearch();
+}
+
+function highlightAc(){
+  document.querySelectorAll('.ac-item').forEach((el,i)=>el.classList.toggle('active',i===_acIdx));
+}
+
+function handleSearchKey(e){
+  const open=document.getElementById('acDropdown').classList.contains('visible')&&_acItems.length;
+  if(!open){if(e.key==='Enter')doSearch();return;}
+  if(e.key==='ArrowDown'){e.preventDefault();_acIdx=Math.min(_acIdx+1,_acItems.length-1);highlightAc();}
+  else if(e.key==='ArrowUp'){e.preventDefault();_acIdx=Math.max(_acIdx-1,-1);highlightAc();}
+  else if(e.key==='Enter'){e.preventDefault();if(_acIdx>=0)pickAc(_acIdx);else{hideAc();doSearch();}}
+  else if(e.key==='Escape')hideAc();
+}
+
+document.addEventListener('click',e=>{if(!e.target.closest('.ac-wrap'))hideAc();});
+
+// ── Search ────────────────────────────────────────────────────────────────────
+async function doSearch(){
+  const query=document.getElementById('searchInput').value.trim();
+  const vintage=document.getElementById('vintageSelect').value;
+  const out=document.getElementById('searchResult');
+  const btn=document.getElementById('searchBtn');
   hideAc();
-  doSearch();
+  if(!query)return;
+
+  btn.disabled=true;
+  out.innerHTML=`<div class="loading"><div class="spinner"></div>Looking up pricing…</div>`;
+
+  try{
+    const body={menu_text:query};
+    if(vintage)body.vintage=parseInt(vintage);
+    const res=await fetch('/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data=await res.json();
+    if(!res.ok){showErr(out,data.detail||'Server error');return;}
+    out.innerHTML=renderResult(data,query);
+  }catch(e){showErr(out,'Network error — check server status.');}
+  finally{btn.disabled=false;}
 }
 
-function highlightAc() {
-  document.querySelectorAll('.ac-item').forEach((el,i) =>
-    el.classList.toggle('active', i===_acIdx)
-  );
-}
+function renderResult(d,query){
+  const ident=d.identification||{},ep=d.effective_pricing;
 
-function handleSearchKey(e) {
-  const drop = document.getElementById('acDropdown');
-  const open = drop.classList.contains('visible') && _acItems.length;
-  if (!open) { if (e.key==='Enter') doSearch(); return; }
-  if (e.key==='ArrowDown')  { e.preventDefault(); _acIdx=Math.min(_acIdx+1,_acItems.length-1); highlightAc(); }
-  else if (e.key==='ArrowUp') { e.preventDefault(); _acIdx=Math.max(_acIdx-1,-1); highlightAc(); }
-  else if (e.key==='Enter')   { e.preventDefault(); if (_acIdx>=0) pickAc(_acIdx); else { hideAc(); doSearch(); } }
-  else if (e.key==='Escape')  { hideAc(); }
-}
-
-// Close dropdown when clicking outside the autocomplete wrap
-document.addEventListener('click', e => { if (!e.target.closest('.ac-wrap')) hideAc(); });
-
-// ── SEARCH ────────────────────────────────────────────────────────────────────
-async function doSearch() {
-  const query   = document.getElementById('searchInput').value.trim();
-  const vintage = document.getElementById('vintageSelect').value;
-  const out     = document.getElementById('searchResult');
-  const btn     = document.getElementById('searchBtn');
-  hideAc();
-  if (!query) return;
-
-  btn.disabled = true;
-  out.innerHTML = `<div class="loading"><div class="spinner"></div>Looking up pricing…</div>`;
-
-  try {
-    const body = { menu_text: query };
-    if (vintage) body.vintage = parseInt(vintage);
-    const res  = await fetch('/analyze', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
-    const data = await res.json();
-    if (!res.ok) { showError(out, data.detail||'Server error'); return; }
-    out.innerHTML = renderSearchResult(data, query);
-  } catch(e) {
-    showError(out, 'Network error — is the server running?');
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-function renderSearchResult(d, query) {
-  const ident = d.identification || {};
-  const ep    = d.effective_pricing;
-
-  if (!ident.matched) {
-    // If we got a dynamic price (even a regional estimate), show it
-    if (ep && ep.avg_retail) {
-      return renderPricingCard({
-        wineName: query, producer:'', region:'', varietal:'',
-        confidence:0, confidenceLevel:'none',
-        retail:ep.avg_retail, wholesale:ep.estimated_wholesale,
-        minRetail:ep.min_retail, maxRetail:ep.max_retail,
-        dataConf:ep.data_confidence, source:ep.price_source,
-        note:ep.price_basis_note, isEstimate:true, query,
-      });
-    }
-    // Hard miss — show not-found with prominent Vivino CTA
-    return `<div class="not-found">
-      <div class="not-found-icon">🍷</div>
+  if(!ident.matched){
+    if(ep&&ep.avg_retail) return renderCard({wineName:query,producer:'',region:'',varietal:'',confidence:0,confidenceLevel:'none',retail:ep.avg_retail,wholesale:ep.estimated_wholesale,minRetail:ep.min_retail,maxRetail:ep.max_retail,dataConf:ep.data_confidence,note:ep.price_basis_note,isEstimate:true,query});
+    return`<div class="not-found">
+      <div style="font-size:28px">🍷</div>
       <div class="not-found-title">"${query}" isn't in our catalog yet</div>
-      <div class="not-found-sub">
-        Our catalog has 15,000+ wines and grows daily. Search Vivino directly for live pricing,
-        or try including the producer name (e.g. "Kosta Browne Russian River Valley 2021").
-      </div>
-      <div class="not-found-actions">
-        ${vivinoBtn(query,'Search Vivino for pricing')}
-      </div>
+      <div class="not-found-sub">Our catalog has 15,000+ wines and grows daily. Try including the producer name, or search Vivino directly for live pricing.</div>
+      <div style="margin-top:4px">${vivinoBtn(query,'Check pricing on Vivino')}</div>
     </div>`;
   }
 
-  return renderPricingCard({
-    wineName:ident.name||query, producer:ident.producer,
-    region:ident.region, varietal:ident.varietal, vintage:ident.vintage,
-    confidence:ident.confidence, confidenceLevel:ident.confidence_level,
-    retail:ep?.avg_retail, wholesale:ep?.estimated_wholesale,
-    minRetail:ep?.min_retail, maxRetail:ep?.max_retail,
-    dataConf:ep?.data_confidence, source:ep?.price_source,
-    note:ep?.price_basis_note, isEstimate:false, query,
-  });
+  return renderCard({wineName:ident.name||query,producer:ident.producer,region:ident.region,varietal:ident.varietal,vintage:ident.vintage,confidence:ident.confidence,confidenceLevel:ident.confidence_level,retail:ep?.avg_retail,wholesale:ep?.estimated_wholesale,minRetail:ep?.min_retail,maxRetail:ep?.max_retail,dataConf:ep?.data_confidence,source:ep?.price_source,note:ep?.price_basis_note,isEstimate:false,query});
 }
 
-function renderPricingCard(p) {
-  const hasPrice  = p.retail != null;
-  const vintageStr = p.vintage ? ` ${p.vintage}` : '';
-  const tags = [p.region, p.varietal].filter(Boolean).map(t=>`<span class="meta-tag">${t}</span>`).join('');
+function renderCard(p){
+  const hasPrice=p.retail!=null;
+  const vintStr=p.vintage?` ${p.vintage}`:'';
+  const tags=[p.region,p.varietal].filter(Boolean).map(t=>`<span class="tag">${t}</span>`).join('');
 
-  const pricingHTML = hasPrice ? `
-    <div class="result-pricing">
-      <div class="price-block">
+  const priceHTML=hasPrice?`
+    <div class="rc-prices">
+      <div class="price-col">
         <div class="price-label">Retail (avg)</div>
-        <div class="price-value">${fmt(p.retail)}</div>
-        ${p.minRetail&&p.maxRetail ? `<div class="price-range">Range: ${fmt(p.minRetail)} – ${fmt(p.maxRetail)}</div>` : ''}
-        <div class="price-note">${p.isEstimate ? 'Regional estimate · not live market data' : (p.source||'Vivino market data')}</div>
+        <div class="price-value green">${fmt(p.retail)}</div>
+        ${p.minRetail&&p.maxRetail?`<div class="price-range">Range ${fmt(p.minRetail)} – ${fmt(p.maxRetail)}</div>`:''}
       </div>
-      <div class="price-block">
+      <div class="price-col">
         <div class="price-label">Wholesale (est.)</div>
         <div class="price-value">${fmt(p.wholesale)}</div>
-        <div class="price-range">~${p.wholesale&&p.retail?Math.round(p.wholesale/p.retail*100):'50'}% of retail</div>
-        <div class="price-note">Distributor cost estimate</div>
+        <div class="price-range">~${p.wholesale&&p.retail?Math.round(p.wholesale/p.retail*100):50}% of retail</div>
       </div>
     </div>
-  ` : `<div class="no-price-notice">⚠️ Wine identified but no Vivino pricing cached yet — background worker will price this soon.</div>`;
+  `:`<div class="no-price">No pricing cached yet — background worker will price this soon.</div>`;
 
-  // Footer: data confidence + always show Vivino link
-  const searchQuery = p.producer && !p.wineName.toLowerCase().includes(p.producer.toLowerCase())
-    ? `${p.producer} ${p.wineName}${p.vintage?' '+p.vintage:''}`
-    : `${p.wineName}${p.vintage?' '+p.vintage:''}`;
+  const vqName=p.producer&&!p.wineName.toLowerCase().includes(p.producer.toLowerCase())?`${p.producer} ${p.wineName}${p.vintage?' '+p.vintage:''}`:p.wineName+(p.vintage?' '+p.vintage:'');
 
-  const footerItems = hasPrice
-    ? `<span class="footer-item"><strong>Data:</strong> ${p.dataConf||'—'} confidence</span>
-       ${p.note ? `<span class="footer-item"><strong>Source:</strong> ${p.note.slice(0,100)}${p.note.length>100?'…':''}</span>` : ''}`
-    : '';
-
-  return `
-  <div class="result-card">
-    <div class="result-card-header">
-      <div class="result-title-row">
+  return`<div class="result-card">
+    <div class="rc-header">
+      <div class="rc-title-row">
         <div>
-          <div class="result-wine-name">${p.wineName}${vintageStr}</div>
-          ${p.producer?`<div class="result-producer">${p.producer}</div>`:''}
+          <div class="rc-name">${p.wineName}${vintStr}</div>
+          ${p.producer?`<div class="rc-producer">${p.producer}</div>`:''}
         </div>
-        ${!p.isEstimate?`<span class="conf-badge conf-${p.confidenceLevel}">${confLabel(p.confidenceLevel)}</span>`:''}
+        ${!p.isEstimate?`<span class="conf-badge conf-${p.confidenceLevel}">${confLabel(p.confidenceLevel)}</span>`:'<span class="conf-badge conf-low">ESTIMATE</span>'}
       </div>
-      ${tags?`<div class="result-meta">${tags}</div>`:''}
+      ${tags?`<div class="rc-tags">${tags}</div>`:''}
     </div>
-    ${pricingHTML}
-    <div class="result-footer">
-      ${footerItems}
-      <div class="footer-vivino">${vivinoBtn(searchQuery)}</div>
+    ${priceHTML}
+    <div class="rc-footer">
+      ${hasPrice?`<span><strong>Data:</strong> ${p.dataConf||'—'}</span>`:''}
+      ${p.isEstimate?`<span style="color:var(--amber)">Regional estimate — not live market data</span>`:''}
+      <div class="rc-footer-right">${vivinoBtn(vqName)}</div>
     </div>
   </div>`;
 }
 
-// ── UPLOAD ────────────────────────────────────────────────────────────────────
-function handleDrop(e) {
-  e.preventDefault();
-  document.getElementById('dropZone').classList.remove('drag-over');
-  const file = e.dataTransfer.files[0];
-  if (file) uploadFile(file);
-}
-function handleFileSelect(e) { const f=e.target.files[0]; if(f) uploadFile(f); }
+// ── Upload ────────────────────────────────────────────────────────────────────
+function handleDrop(e){e.preventDefault();document.getElementById('dropZone').classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f)uploadFile(f);}
+function handleFileSelect(e){const f=e.target.files[0];if(f)uploadFile(f);}
 
-let currentResults=[], currentFilter='all';
+let currentResults=[],currentFilter='all';
 
-async function uploadFile(file) {
-  const out = document.getElementById('uploadResult');
-  out.innerHTML=`<div class="loading" style="margin-top:24px"><div class="spinner"></div>Analysing menu — this may take 15–30 seconds…</div>`;
-  const form=new FormData(); form.append('file',file);
-  try {
+async function uploadFile(file){
+  const out=document.getElementById('uploadResult');
+  out.innerHTML=`<div class="loading" style="margin-top:24px"><div class="spinner"></div>Analysing menu — may take 15–30 seconds…</div>`;
+  const form=new FormData();form.append('file',file);
+  try{
     const res=await fetch('/menu/upload',{method:'POST',body:form});
     const data=await res.json();
-    if(!res.ok){showError(out,data.detail||'Server error');return;}
-    currentResults=data.results||[]; currentFilter='all';
-    renderUploadResults(out,data);
-  } catch(e){ showError(out,'Upload failed — '+e.message); }
+    if(!res.ok){showErr(out,data.detail||'Server error');return;}
+    currentResults=data.results||[];currentFilter='all';
+    renderUpload(out,data);
+  }catch(e){showErr(out,'Upload failed — '+e.message);}
 }
 
-function renderUploadResults(out,data) {
-  const total_good=(data.steals||0)+(data.good_deals||0);
+function renderUpload(out,data){
+  const tg=(data.steals||0)+(data.good_deals||0);
   out.innerHTML=`
   <div style="margin-top:28px">
-    <div class="stats-grid">
-      <div class="stat-card"><div class="stat-num">${data.total_parsed}</div><div class="stat-label">Total Wines</div></div>
-      <div class="stat-card"><div class="stat-num">${data.matched}</div><div class="stat-label">Matched</div></div>
-      <div class="stat-card green"><div class="stat-num">${total_good}</div><div class="stat-label">Good Deals</div></div>
-      <div class="stat-card amber"><div class="stat-num">${data.fair_deals}</div><div class="stat-label">Fair</div></div>
-      <div class="stat-card red"><div class="stat-num">${data.expensive}</div><div class="stat-label">Pricey</div></div>
+    <div class="stats-row">
+      <div class="stat"><div class="stat-n">${data.total_parsed}</div><div class="stat-l">Total</div></div>
+      <div class="stat"><div class="stat-n">${data.matched}</div><div class="stat-l">Matched</div></div>
+      <div class="stat g"><div class="stat-n">${tg}</div><div class="stat-l">Deals</div></div>
+      <div class="stat a"><div class="stat-n">${data.fair_deals}</div><div class="stat-l">Fair</div></div>
+      <div class="stat r"><div class="stat-n">${data.expensive}</div><div class="stat-l">Pricey</div></div>
     </div>
     <div class="filters">
       <button class="filter-btn active" onclick="setFilter('all')">All (${data.total_parsed})</button>
-      <button class="filter-btn" onclick="setFilter('deal')">🟢 Deals (${total_good})</button>
-      <button class="filter-btn" onclick="setFilter('fair')">🟡 Fair (${data.fair_deals})</button>
-      <button class="filter-btn" onclick="setFilter('expensive')">🔴 Pricey (${data.expensive})</button>
-      <button class="filter-btn" onclick="setFilter('unknown')">⚪ Unpriced (${data.unmatched})</button>
+      <button class="filter-btn" onclick="setFilter('deal')">Deals (${tg})</button>
+      <button class="filter-btn" onclick="setFilter('fair')">Fair (${data.fair_deals})</button>
+      <button class="filter-btn" onclick="setFilter('expensive')">Pricey (${data.expensive})</button>
+      <button class="filter-btn" onclick="setFilter('unknown')">Unpriced (${data.unmatched})</button>
     </div>
-    <div class="results-wrap" id="tableWrap">${buildTable(data.results,'all')}</div>
+    <div class="tbl-wrap" id="tableWrap">${buildTable(data.results,'all')}</div>
   </div>`;
 }
 
-function setFilter(f) {
+function setFilter(f){
   currentFilter=f;
   document.querySelectorAll('.filter-btn').forEach((b,i)=>
     b.classList.toggle('active',(i===0&&f==='all')||(i===1&&f==='deal')||(i===2&&f==='fair')||(i===3&&f==='expensive')||(i===4&&f==='unknown'))
@@ -557,31 +517,32 @@ function setFilter(f) {
   document.getElementById('tableWrap').innerHTML=buildTable(currentResults,f);
 }
 
-function buildTable(results,filter) {
+function buildTable(results,filter){
   let rows=results.filter(r=>{
     if(filter==='all')return true;
     if(filter==='deal')return r.deal_rating==='steal'||r.deal_rating==='good';
     if(filter==='fair')return r.deal_rating==='fair';
     if(filter==='expensive')return r.deal_rating==='expensive';
     if(filter==='unknown')return r.deal_rating==='unknown'||!r.retail_price;
+    return true;
   });
-  if(!rows.length) return `<div class="empty-state">No wines in this category.</div>`;
-  const order={steal:0,good:1,fair:2,expensive:3,unknown:4};
-  rows.sort((a,b)=>(order[a.deal_rating]||4)-(order[b.deal_rating]||4));
+  if(!rows.length)return`<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No wines in this category.</div>`;
+  const ord={steal:0,good:1,fair:2,expensive:3,unknown:4};
+  rows.sort((a,b)=>(ord[a.deal_rating]||4)-(ord[b.deal_rating]||4));
   const trs=rows.map(r=>{
-    const displayName=r.wine_name||r.raw_text;
-    const mc=r.markup?(r.markup<0.8?'#4ade80':r.markup<=1.5?'#86efac':r.markup<=2.5?'#fbbf24':'#f87171'):'var(--muted)';
-    return `<tr class="${!r.matched?'unmatched-row':''}">
-      <td class="wine-cell"><div class="wine-name">${displayName}</div>${r.producer?`<div class="wine-producer">${r.producer}</div>`:''}</td>
+    const dn=r.wine_name||r.raw_text;
+    const mc=r.markup?(r.markup<0.8?'var(--green)':r.markup<=1.5?'#6ee7b7':r.markup<=2.5?'var(--amber)':'var(--red)'):'var(--muted)';
+    return`<tr class="${!r.matched?'dim':''}">
+      <td style="max-width:220px"><div class="wn">${dn}</div>${r.producer?`<div class="wp">${r.producer}</div>`:''}</td>
       <td>${r.vintage||'NV'}</td>
       <td>${fmt(r.menu_price)}</td>
-      <td>${r.retail_price!=null?fmt(r.retail_price):'<span style="color:var(--muted)">—</span>'}</td>
-      <td class="markup-cell" style="color:${mc}">${r.markup!=null?r.markup.toFixed(2)+'×':'—'}</td>
+      <td>${r.retail_price!=null?fmt(r.retail_price):`<span style="color:var(--muted)">—</span>`}</td>
+      <td class="mc" style="color:${mc}">${r.markup!=null?r.markup.toFixed(2)+'×':'—'}</td>
       <td>${dealBadge(r.deal_rating)}</td>
     </tr>`;
   }).join('');
-  return `<table class="results-table">
-    <thead><tr><th>Wine</th><th>Vintage</th><th>Menu $</th><th>Retail $</th><th>Mult.</th><th>Rating</th></tr></thead>
+  return`<table class="res-tbl">
+    <thead><tr><th>Wine</th><th>Vintage</th><th>Menu</th><th>Retail</th><th>Mult.</th><th>Rating</th></tr></thead>
     <tbody>${trs}</tbody>
   </table>`;
 }
