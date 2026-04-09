@@ -175,7 +175,25 @@ main { max-width: 780px; margin: 0 auto; padding: 48px 24px 80px; }
   gap: 12px; text-align: center;
 }
 .not-found-title { font-size: 16px; font-weight: 600; color: var(--text); }
-.not-found-sub   { font-size: 13px; color: var(--muted); max-width: 360px; line-height: 1.6; }
+.not-found-sub   { font-size: 13px; color: var(--muted); max-width: 380px; line-height: 1.6; }
+
+/* ── Discovery (background Vivino search) state ───────────────────────────── */
+.discovery-state {
+  background: var(--card); border: 1px solid var(--accent); border-radius: var(--radius);
+  padding: 32px 28px; display: flex; flex-direction: column; align-items: center;
+  gap: 14px; text-align: center;
+}
+.discovery-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.discovery-sub   { font-size: 13px; color: var(--muted); max-width: 360px; line-height: 1.6; }
+.discovery-progress { width: 100%; max-width: 260px; height: 3px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.discovery-bar { height: 100%; background: var(--accent); border-radius: 3px; animation: prog 22s linear forwards; }
+@keyframes prog { from{width:0%} to{width:100%} }
+.discovery-countdown { font-size: 12px; color: var(--accent); font-weight: 600; }
+.btn-ghost {
+  padding: 7px 16px; border-radius: 6px; font-size: 13px; font-weight: 500;
+  border: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; transition: all .15s;
+}
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ── Loading spinner ──────────────────────────────────────────────────────── */
 .loading { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 48px; color: var(--muted); font-size: 13px; }
@@ -328,6 +346,7 @@ let _acItems=[],_acIdx=-1,_acTimer=null;
 function onSearchInput(){
   const q=document.getElementById('searchInput').value.trim();
   clearTimeout(_acTimer);
+  _clearDiscoveryTimer();  // cancel any pending auto-retry if user types a new query
   if(q.length<2){hideAc();return;}
   _acTimer=setTimeout(()=>fetchAc(q),260);
 }
@@ -388,16 +407,23 @@ function handleSearchKey(e){
 document.addEventListener('click',e=>{if(!e.target.closest('.ac-wrap'))hideAc();});
 
 // ── Search ────────────────────────────────────────────────────────────────────
-async function doSearch(){
+let _discoveryTimer = null;   // countdown interval
+let _discoveryRetry = false;  // true when this is an auto-retry after discovery
+
+function _clearDiscoveryTimer(){ clearInterval(_discoveryTimer); _discoveryTimer=null; }
+
+async function doSearch(isRetry){
   const query=document.getElementById('searchInput').value.trim();
   const vintage=document.getElementById('vintageSelect').value;
   const out=document.getElementById('searchResult');
   const btn=document.getElementById('searchBtn');
+  _clearDiscoveryTimer();
   hideAc();
   if(!query)return;
 
+  _discoveryRetry=!!isRetry;
   btn.disabled=true;
-  out.innerHTML=`<div class="loading"><div class="spinner"></div>Looking up pricing…</div>`;
+  out.innerHTML=`<div class="loading"><div class="spinner"></div>${isRetry?'Checking Vivino result…':'Looking up pricing…'}</div>`;
 
   try{
     const body={menu_text:query};
@@ -405,25 +431,78 @@ async function doSearch(){
     const res=await fetch('/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const data=await res.json();
     if(!res.ok){showErr(out,data.detail||'Server error');return;}
-    out.innerHTML=renderResult(data,query);
+    out.innerHTML=renderResult(data,query,isRetry);
   }catch(e){showErr(out,'Network error — check server status.');}
   finally{btn.disabled=false;}
 }
 
-function renderResult(d,query){
+function renderResult(d, query, isRetry){
   const ident=d.identification||{},ep=d.effective_pricing;
 
   if(!ident.matched){
-    if(ep&&ep.avg_retail) return renderCard({wineName:query,producer:'',region:'',varietal:'',confidence:0,confidenceLevel:'none',retail:ep.avg_retail,wholesale:ep.estimated_wholesale,minRetail:ep.min_retail,maxRetail:ep.max_retail,dataConf:ep.data_confidence,note:ep.price_basis_note,isEstimate:true,query});
+    // Show a regional estimate if we have one (from dynamic_lookup)
+    if(ep&&ep.avg_retail) return renderCard({
+      wineName:query,producer:'',region:'',varietal:'',
+      confidence:0,confidenceLevel:'none',
+      retail:ep.avg_retail,wholesale:ep.estimated_wholesale,
+      minRetail:ep.min_retail,maxRetail:ep.max_retail,
+      dataConf:ep.data_confidence,note:ep.price_basis_note,
+      isEstimate:true,query,
+    });
+
+    // First attempt: show "searching Vivino in background" with countdown
+    if(!isRetry){
+      _startDiscoveryCountdown(query);
+      return`<div class="discovery-state" id="discoveryCard">
+        <div style="font-size:24px">🔍</div>
+        <div class="discovery-title">Searching Vivino for "${query}"</div>
+        <div class="discovery-sub">
+          Not in our catalog yet — we're searching Vivino in the background.
+          If found, it'll be added to the catalog automatically.
+        </div>
+        <div class="discovery-progress"><div class="discovery-bar"></div></div>
+        <div class="discovery-countdown" id="discCountdown">Checking in 22 seconds…</div>
+        <div style="display:flex;gap:10px;margin-top:4px">
+          <button class="btn-ghost" onclick="doSearch(true)">Check now</button>
+          ${vivinoBtn(query,'Open on Vivino')}
+        </div>
+      </div>`;
+    }
+
+    // Retry also failed — wine genuinely not on Vivino or scrape failed
     return`<div class="not-found">
       <div style="font-size:28px">🍷</div>
-      <div class="not-found-title">"${query}" isn't in our catalog yet</div>
-      <div class="not-found-sub">Our catalog has 15,000+ wines and grows daily. Try including the producer name, or search Vivino directly for live pricing.</div>
-      <div style="margin-top:4px">${vivinoBtn(query,'Check pricing on Vivino')}</div>
+      <div class="not-found-title">"${query}" not found</div>
+      <div class="not-found-sub">
+        Vivino didn't return a match. Try a more specific name (include producer),
+        or check Vivino directly.
+      </div>
+      <div style="margin-top:4px">${vivinoBtn(query,'Search on Vivino')}</div>
     </div>`;
   }
 
-  return renderCard({wineName:ident.name||query,producer:ident.producer,region:ident.region,varietal:ident.varietal,vintage:ident.vintage,confidence:ident.confidence,confidenceLevel:ident.confidence_level,retail:ep?.avg_retail,wholesale:ep?.estimated_wholesale,minRetail:ep?.min_retail,maxRetail:ep?.max_retail,dataConf:ep?.data_confidence,source:ep?.price_source,note:ep?.price_basis_note,isEstimate:false,query});
+  return renderCard({
+    wineName:ident.name||query,producer:ident.producer,
+    region:ident.region,varietal:ident.varietal,vintage:ident.vintage,
+    confidence:ident.confidence,confidenceLevel:ident.confidence_level,
+    retail:ep?.avg_retail,wholesale:ep?.estimated_wholesale,
+    minRetail:ep?.min_retail,maxRetail:ep?.max_retail,
+    dataConf:ep?.data_confidence,source:ep?.price_source,
+    note:ep?.price_basis_note,isEstimate:false,query,
+  });
+}
+
+function _startDiscoveryCountdown(query){
+  let secs = 22;
+  _discoveryTimer = setInterval(()=>{
+    secs--;
+    const el = document.getElementById('discCountdown');
+    if(el) el.textContent = secs > 0 ? `Checking in ${secs} second${secs!==1?'s':''}…` : 'Checking…';
+    if(secs <= 0){
+      _clearDiscoveryTimer();
+      doSearch(true);
+    }
+  }, 1000);
 }
 
 function renderCard(p){
