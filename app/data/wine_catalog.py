@@ -3814,6 +3814,166 @@ SECOND_WAVE = [
 ]
 
 # ---------------------------------------------------------------------------
+# NAPA / SONOMA – Sauvignon Blanc specialists + mid-tier everyday staples
+# (these are the most commonly searched wines that were missing from the catalog)
+# ---------------------------------------------------------------------------
+NAPA_SB_MIDTIER = [
+    # ── St. Supery ──────────────────────────────────────────────────────────
+    WineCatalogEntry(
+        id="st-supery-sauvignon-blanc",
+        name="St. Supery Estate Sauvignon Blanc",
+        producer="St. Supery Estate Vineyards & Winery",
+        region="Napa Valley, California, USA", country="USA", appellation="Napa Valley",
+        varietal="Sauvignon Blanc", wine_type="white", avg_retail_price=24.0, price_tier="mid",
+        aliases=["St Supery Sauvignon Blanc Napa", "Saint Supery Sauvignon Blanc", "St. Supery SB Napa Valley", "St Supery Estate SB"],
+        description="St. Supery's Estate Sauvignon Blanc is one of Napa Valley's most reliable and food-friendly whites; crisp citrus and herbaceous character at an accessible price point.",
+    ),
+    WineCatalogEntry(
+        id="st-supery-dollarhide-sauvignon-blanc",
+        name="St. Supery Dollarhide Sauvignon Blanc",
+        producer="St. Supery Estate Vineyards & Winery",
+        region="Pope Valley, Napa County, California, USA", country="USA", appellation="Napa County",
+        varietal="Sauvignon Blanc", wine_type="white", avg_retail_price=45.0, price_tier="mid",
+        aliases=["St Supery Dollarhide SB", "Saint Supery Dollarhide Sauvignon Blanc", "St. Supery Dollarhide Ranch"],
+        description="St. Supery's Dollarhide Sauvignon Blanc is from their estate ranch in Pope Valley; a richer, more textural SB with Sémillon blended in, showing tropical fruit and complexity.",
+    ),
+    WineCatalogEntry(
+        id="st-supery-cabernet-sauvignon",
+        name="St. Supery Napa Valley Cabernet Sauvignon",
+        producer="St. Supery Estate Vineyards & Winery",
+        region="Napa Valley, California, USA", country="USA", appellation="Napa Valley",
+        varietal="Cabernet Sauvignon", wine_type="red", avg_retail_price=65.0, price_tier="premium",
+        aliases=["St Supery Cabernet Napa", "Saint Supery Cab Sauvignon Napa Valley", "St. Supery Napa Cab"],
+        description="St. Supery's Napa Valley Cabernet is a polished, accessible Napa Cab; ripe dark fruit with integrated oak, designed for approachability and food pairing.",
+    ),
+    WineCatalogEntry(
+        id="st-supery-rutherford-cabernet",
+        name="St. Supery Rutherford Cabernet Sauvignon",
+        producer="St. Supery Estate Vineyards & Winery",
+        region="Rutherford, Napa Valley, California, USA", country="USA", appellation="Rutherford",
+        varietal="Cabernet Sauvignon", wine_type="red", avg_retail_price=100.0, price_tier="premium",
+        aliases=["St Supery Rutherford Cab", "Saint Supery Rutherford Cabernet", "St. Supery Rutherford Reserve"],
+        description="St. Supery's Rutherford Cabernet showcases the dusty tannins and concentrated dark fruit characteristic of this famous Napa appellation.",
+    ),
+    WineCatalogEntry(
+        id="st-supery-merlot",
+        name="St. Supery Napa Valley Merlot",
+        producer="St. Supery Estate Vineyards & Winery",
+        region="Napa Valley, California, USA", country="USA", appellation="Napa Valley",
+        varietal="Merlot", wine_type="red", avg_retail_price=45.0, price_tier="mid",
+        aliases=["St Supery Merlot Napa", "Saint Supery Merlot Napa Valley"],
+        description="St. Supery's Napa Valley Merlot is a plush, approachable red with soft tannins and ripe plum character; a crowd-pleasing restaurant staple.",
+    ),
+    # ── Spottswoode ─────────────────────────────────────────────────────────
+    WineCatalogEntry(
+        id="spottswoode-sauvignon-blanc",
+        name="Spottswoode Estate Sauvignon Blanc",
+        producer="Spottswoode Estate Vineyard & Winery",
+        region="St. Helena, Napa Valley, California, USA", country="USA", appellation="Napa Valley",
+        varietal="Sauvignon Blanc", wine_type="white", avg_retail_price=55.0, price_tier="mid",
+        aliases=["Spottswoode SB Napa", "Spottswoode Sauvignon Blanc St Helena", "Spottswoode Winery Sauvignon Blanc"],
+        description="Spottswoode's Sauvignon Blanc is one of Napa Valley's finest; made from estate fruit in St. Helena with a mix of steel and neutral oak, it achieves precision and complexity rarely found in California SB.",
+    ),
+    # ── Robert Mondavi SB / Fumé Blanc ──────────────────────────────────────
+    WineCatalogEntry(
+        id="mondavi-fume-blanc",
+        name="Robert Mondavi Winery Fumé Blanc",
+        producer="Robert Mondavi Winery",
+        region="Napa Valley, California, USA", country="USA", appellation="Napa Valley",
+        varietal="Sauvignon Blanc", wine_type="white", avg_retail_price=28.0, price_tier="mid",
+        aliases=["Robert Mondavi Fumé Blanc Napa", "Mondavi Fume Blanc Napa Valley", "Robert Mondavi Sauvignon Blanc Napa", "Mondavi SB Napa"],
+        description="Robert Mondavi popularized 'Fumé Blanc' as a name for Sauvignon Blanc in California; this Napa Valley bottling is the original benchmark, with citrus, herb, and subtle oak character.",
+    ),
+    # ── Honig ───────────────────────────────────────────────────────────────
+    WineCatalogEntry(
+        id="honig-sauvignon-blanc",
+        name="Honig Vineyard & Winery Sauvignon Blanc",
+        producer="Honig Vineyard & Winery",
+        region="Rutherford, Napa Valley, California, USA", country="USA", appellation="Rutherford",
+        varietal="Sauvignon Blanc", wine_type="white", avg_retail_price=22.0, price_tier="mid",
+        aliases=["Honig Sauvignon Blanc Napa", "Honig SB Rutherford", "Honig Winery SB Napa Valley"],
+        description="Honig's Sauvignon Blanc from Rutherford is one of Napa's best-value whites; sustainably farmed with bright citrus and melon flavors that work perfectly with food.",
+    ),
+    # ── Frog's Leap ─────────────────────────────────────────────────────────
+    WineCatalogEntry(
+        id="frogs-leap-sauvignon-blanc",
+        name="Frog's Leap Winery Sauvignon Blanc",
+        producer="Frog's Leap Winery",
+        region="Rutherford, Napa Valley, California, USA", country="USA", appellation="Napa Valley",
+        varietal="Sauvignon Blanc", wine_type="white", avg_retail_price=26.0, price_tier="mid",
+        aliases=["Frogs Leap Sauvignon Blanc Napa", "Frog's Leap SB Napa Valley", "Frogs Leap Winery SB"],
+        description="Frog's Leap's Sauvignon Blanc is made from dry-farmed, certified organic estate fruit; crisp and vibrant with classic citrus character at an outstanding price.",
+    ),
+    # ── Duckhorn ────────────────────────────────────────────────────────────
+    WineCatalogEntry(
+        id="duckhorn-sauvignon-blanc",
+        name="Duckhorn Vineyards Sauvignon Blanc",
+        producer="Duckhorn Vineyards",
+        region="Napa Valley, California, USA", country="USA", appellation="Napa Valley",
+        varietal="Sauvignon Blanc", wine_type="white", avg_retail_price=30.0, price_tier="mid",
+        aliases=["Duckhorn Sauvignon Blanc Napa", "Duckhorn SB Napa Valley", "Duckhorn Vineyards SB"],
+        description="Duckhorn's Sauvignon Blanc is a Napa Valley staple on restaurant wine lists; fresh and textural with melon, citrus, and a hint of minerality.",
+    ),
+    WineCatalogEntry(
+        id="duckhorn-napa-merlot",
+        name="Duckhorn Vineyards Napa Valley Merlot",
+        producer="Duckhorn Vineyards",
+        region="Napa Valley, California, USA", country="USA", appellation="Napa Valley",
+        varietal="Merlot", wine_type="red", avg_retail_price=75.0, price_tier="premium",
+        aliases=["Duckhorn Merlot Napa", "Duckhorn Vineyards Napa Merlot", "Duckhorn Napa Valley Merlot"],
+        description="Duckhorn's Napa Valley Merlot is the wine that put American Merlot on the map; rich, plummy, and polished, it remains the benchmark for California Merlot on wine lists nationwide.",
+    ),
+    # ── Grgich Hills ────────────────────────────────────────────────────────
+    WineCatalogEntry(
+        id="grgich-hills-fume-blanc",
+        name="Grgich Hills Estate Fumé Blanc",
+        producer="Grgich Hills Estate",
+        region="Napa Valley, California, USA", country="USA", appellation="Napa Valley",
+        varietal="Sauvignon Blanc", wine_type="white", avg_retail_price=38.0, price_tier="mid",
+        aliases=["Grgich Hills Sauvignon Blanc", "Grgich Hills Fume Blanc Napa", "Mike Grgich Fumé Blanc Napa Valley"],
+        description="Grgich Hills' Fumé Blanc is made from biodynamically farmed estate fruit across Napa Valley; Mike Grgich's meticulous winemaking produces a wine of uncommon depth and longevity.",
+    ),
+    WineCatalogEntry(
+        id="grgich-hills-chardonnay",
+        name="Grgich Hills Estate Chardonnay",
+        producer="Grgich Hills Estate",
+        region="Napa Valley, California, USA", country="USA", appellation="Napa Valley",
+        varietal="Chardonnay", wine_type="white", avg_retail_price=65.0, price_tier="premium",
+        aliases=["Grgich Hills Chardonnay Napa", "Mike Grgich Chardonnay Napa Valley", "Grgich Hills Estate Chard"],
+        description="Grgich Hills' Chardonnay carries the legacy of Mike Grgich's 1976 Paris Tasting victory; biodynamic farming and restrained winemaking produce one of Napa's most age-worthy whites.",
+    ),
+    # ── Cakebread SB ────────────────────────────────────────────────────────
+    WineCatalogEntry(
+        id="cakebread-sauvignon-blanc",
+        name="Cakebread Cellars Sauvignon Blanc",
+        producer="Cakebread Cellars",
+        region="Napa Valley, California, USA", country="USA", appellation="Napa Valley",
+        varietal="Sauvignon Blanc", wine_type="white", avg_retail_price=35.0, price_tier="mid",
+        aliases=["Cakebread Sauvignon Blanc Napa", "Cakebread SB Napa Valley", "Cakebread Cellars SB"],
+        description="Cakebread's Sauvignon Blanc is one of the most widely poured American whites in fine dining; crisp, vibrant, and consistent from year to year.",
+    ),
+    # ── Ferrari-Carano ──────────────────────────────────────────────────────
+    WineCatalogEntry(
+        id="ferrari-carano-fume-blanc",
+        name="Ferrari-Carano Fumé Blanc",
+        producer="Ferrari-Carano Vineyards and Winery",
+        region="Sonoma County, California, USA", country="USA", appellation="Sonoma County",
+        varietal="Sauvignon Blanc", wine_type="white", avg_retail_price=18.0, price_tier="mid",
+        aliases=["Ferrari Carano Fume Blanc", "Ferrari-Carano Sauvignon Blanc", "Ferrari Carano SB Sonoma"],
+        description="Ferrari-Carano's Fumé Blanc is a perennial best-value California Sauvignon Blanc; crisp and aromatic with consistent grapefruit and herb character.",
+    ),
+    WineCatalogEntry(
+        id="ferrari-carano-chardonnay",
+        name="Ferrari-Carano Reserve Chardonnay Tre Terre",
+        producer="Ferrari-Carano Vineyards and Winery",
+        region="Sonoma County, California, USA", country="USA", appellation="Sonoma County",
+        varietal="Chardonnay", wine_type="white", avg_retail_price=38.0, price_tier="mid",
+        aliases=["Ferrari Carano Chardonnay Reserve", "Ferrari-Carano Tre Terre Chardonnay", "Ferrari Carano Sonoma Chardonnay"],
+        description="Ferrari-Carano's Tre Terre Reserve Chardonnay is a richly textured Sonoma County white; full-bodied with ripe apple, vanilla, and toasty oak character.",
+    ),
+]
+
+# ---------------------------------------------------------------------------
 # Assemble full catalog
 # ---------------------------------------------------------------------------
 WINE_CATALOG: list[WineCatalogEntry] = (
@@ -3888,6 +4048,7 @@ WINE_CATALOG: list[WineCatalogEntry] = (
     + OREGON_WASHINGTON
     + ITALY_EXTRA
     + NY_FINGER_LAKES
+    + NAPA_SB_MIDTIER
 )
 
 # Quick lookup by id
