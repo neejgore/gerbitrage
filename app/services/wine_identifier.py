@@ -21,7 +21,7 @@ from rapidfuzz import fuzz
 from rapidfuzz.distance import JaroWinkler
 
 from app.config import get_settings
-from app.data.wine_catalog import WINE_CATALOG, WINE_CATALOG_BY_ID, WineCatalogEntry
+from app.data.wine_catalog import WINE_CATALOG, WINE_CATALOG_BY_ID, WineCatalogEntry, _derive_price_tier
 from app.services.text_parser import ParsedWine, normalize_text, parse_wine_text
 
 
@@ -93,26 +93,88 @@ class _CatalogEntry:
 
 
 _INDEX: list[_CatalogEntry] = []
+_INDEX_IDS: set[str] = set()   # fast duplicate check
+
+
+def _index_entry(wine: WineCatalogEntry) -> None:
+    """Add a single WineCatalogEntry to _INDEX (skips duplicates)."""
+    if wine.id in _INDEX_IDS:
+        return
+    norm_name = normalize_text(wine.name)
+    norm_producer = normalize_text(wine.producer)
+    norm_aliases = [normalize_text(a) for a in wine.aliases]
+    all_text = " ".join([norm_name] + norm_aliases)
+    tokens = _significant_tokens(all_text)
+    _INDEX.append(
+        _CatalogEntry(
+            wine=wine,
+            normalized_name=norm_name,
+            normalized_producer=norm_producer,
+            normalized_aliases=norm_aliases,
+            tokens=tokens,
+        )
+    )
+    _INDEX_IDS.add(wine.id)
 
 
 def _build_index() -> None:
+    """Index the static catalog + any previously discovered wines on disk."""
+    import json
+    from pathlib import Path
+
     for wine in WINE_CATALOG:
-        norm_name = normalize_text(wine.name)
-        norm_producer = normalize_text(wine.producer)
-        norm_aliases = [normalize_text(a) for a in wine.aliases]
+        _index_entry(wine)
 
-        all_text = " ".join([norm_name] + norm_aliases)
-        tokens = _significant_tokens(all_text)
+    # Load any wines already discovered at runtime and saved to extended_catalog.json
+    catalog_path = Path(__file__).parent.parent / "data" / "extended_catalog.json"
+    if catalog_path.exists():
+        try:
+            data: dict = json.loads(catalog_path.read_text())
+            for wine_id, e in data.items():
+                _index_entry(WineCatalogEntry(
+                    id=e.get("id", wine_id),
+                    name=e.get("name", ""),
+                    producer=e.get("producer", ""),
+                    region=e.get("region", ""),
+                    country=e.get("country", ""),
+                    appellation=e.get("appellation", ""),
+                    varietal=e.get("varietal", ""),
+                    wine_type=e.get("wine_type", "red"),
+                    avg_retail_price=float(e.get("avg_retail_price") or 0),
+                    price_tier=e.get("price_tier", "mid"),
+                    aliases=e.get("aliases", []),
+                ))
+        except Exception:
+            pass  # non-critical; static catalog still usable
 
-        _INDEX.append(
-            _CatalogEntry(
-                wine=wine,
-                normalized_name=norm_name,
-                normalized_producer=norm_producer,
-                normalized_aliases=norm_aliases,
-                tokens=tokens,
-            )
-        )
+
+def register_discovered_wine(
+    wine_id: str,
+    name: str,
+    producer: str,
+    avg_price: float,
+    region: str = "",
+    varietal: str = "",
+    wine_type: str = "red",
+) -> None:
+    """
+    Immediately add a freshly discovered wine to the live search index.
+    Called by vivino_dynamic after a successful Vivino scrape so that the
+    very next search for this wine finds it without a server restart.
+    """
+    _index_entry(WineCatalogEntry(
+        id=wine_id,
+        name=name,
+        producer=producer,
+        region=region,
+        country="",
+        appellation="",
+        varietal=varietal,
+        wine_type=wine_type,
+        avg_retail_price=avg_price or 0.0,
+        price_tier=_derive_price_tier(avg_price or 0.0),
+        aliases=[],
+    ))
 
 
 _build_index()

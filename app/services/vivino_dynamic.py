@@ -136,7 +136,8 @@ async def _run_lookup(
             cache_key_str = pricing_cache_key(wine_id, vintage)
             await cache_set(cache_key_str, breakdown.model_dump(), ttl=43200)
 
-        # Add to extended catalog so future fuzzy-match queries find it
+        # Persist to extended_catalog.json and immediately register in the
+        # live search index so the very next search finds this wine.
         if wine_name and wine_id:
             _add_to_extended_catalog(
                 wine_id=wine_id,
@@ -147,9 +148,19 @@ async def _run_lookup(
                 vivino_rating=result.get("vivino_rating"),
                 vivino_id=result.get("vivino_wine_id", ""),
             )
+            try:
+                from app.services.wine_identifier import register_discovered_wine
+                register_discovered_wine(
+                    wine_id=wine_id,
+                    name=wine_name,
+                    producer=producer,
+                    avg_price=result.get("avg_price") or 0.0,
+                )
+            except Exception as reg_exc:
+                logger.warning("Could not register '%s' in live index: %s", wine_id, reg_exc)
 
         logger.info(
-            "Dynamic Vivino: cached '%s' → avg $%.0f (added to catalog)",
+            "Dynamic Vivino: cached '%s' → avg $%.0f (registered in live index)",
             wine_id, result.get("avg_price", 0),
         )
     else:
