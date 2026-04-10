@@ -68,13 +68,16 @@ def _autocomplete_boost(q_norm: str, wine_id: str, wine_name: str, producer: str
     return boost
 
 
-def _best_price(wine_id: str) -> Optional[float]:
-    """Return the Vivino-cached price for a wine, or None if no real price exists."""
+def _best_price(wine_id: str, catalog_base: Optional[float] = None) -> Optional[float]:
+    """Return the best available price for a wine.
+    Prefers live Vivino-cached data; falls back to catalog base price."""
     entry = _price_cache.get(wine_id)
     if entry:
         p = entry.get("avg_price")
         if p and p > 0:
             return p
+    if catalog_base and catalog_base > 0:
+        return catalog_base
     return None
 
 
@@ -127,7 +130,7 @@ async def search(
                 appellation=m.wine.appellation,
                 varietal=m.wine.varietal,
                 wine_type=m.wine.wine_type,
-                avg_retail_price=_best_price(m.wine.id),
+                avg_retail_price=_best_price(m.wine.id, m.wine.avg_retail_price),
                 price_tier=m.wine.price_tier,
                 match_score=round(boosted_score, 4),
             )

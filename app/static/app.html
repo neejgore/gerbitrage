@@ -358,12 +358,13 @@ function vivinoBtn(q,label='Search on Vivino'){
 }
 
 // ── Autocomplete ──────────────────────────────────────────────────────────────
-let _acItems=[],_acIdx=-1,_acTimer=null;
+let _acItems=[],_acIdx=-1,_acTimer=null,_pickedWineId=null;
 
 function onSearchInput(){
   const q=document.getElementById('searchInput').value.trim();
+  _pickedWineId=null;  // clear any previously pinned wine when user edits the query
   clearTimeout(_acTimer);
-  _clearDiscoveryTimer();  // cancel any pending auto-retry if user types a new query
+  _clearDiscoveryTimer();
   if(q.length<2){hideAc();return;}
   _acTimer=setTimeout(()=>fetchAc(q),260);
 }
@@ -373,7 +374,7 @@ async function fetchAc(q){
     const r=await fetch(`/search?q=${encodeURIComponent(q)}&limit=7`);
     if(!r.ok)return;
     const d=await r.json();
-    _acItems=(d.results||[]).filter(r=>r.match_score>0.35);
+    _acItems=(d.results||[]).filter(r=>r.match_score>0.45);
     renderAc();
   }catch(e){}
 }
@@ -404,14 +405,13 @@ function pickAc(idx){
   const item=_acItems[idx]; if(!item)return;
   const inp=document.getElementById('searchInput');
   const nl=item.name.toLowerCase();
-  // Strip boilerplate producer suffixes before comparing so "Opus One Winery"
-  // normalises to "opus one" and we don't create "Opus One Winery Opus One".
   const pl=(item.producer||'').toLowerCase()
     .replace(/\b(winery|wineries|winemakers?|vineyards?|vineyard|cellars|estates?|estate)\b/g,'')
     .replace(/\s{2,}/g,' ').trim();
-  // Prepend producer only when it adds disambiguation (not already in the name,
-  // and the stripped producer key isn't itself contained in the wine name).
   inp.value=(item.producer&&pl&&!nl.includes(pl)&&!pl.includes(nl))?`${item.producer} ${item.name}`:item.name;
+  // Pin the catalog ID so /analyze skips re-identification and returns exactly
+  // this wine — prevents the "show one wine, get a different one" divergence.
+  _pickedWineId=item.id||null;
   hideAc(); doSearch();
 }
 
@@ -452,6 +452,7 @@ async function doSearch(isRetry){
   try{
     const body={menu_text:query};
     if(vintage)body.vintage=parseInt(vintage);
+    if(_pickedWineId)body.wine_id=_pickedWineId;
     const res=await fetch('/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const data=await res.json();
     if(!res.ok){showErr(out,data.detail||'Server error');return;}

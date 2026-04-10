@@ -89,6 +89,14 @@ class AnalyzeRequest(BaseModel):
     menu_price: Optional[float] = Field(None, gt=0, description="Price listed on the menu (USD)")
     vintage: Optional[int] = Field(None, ge=1900, le=2030, description="Override vintage if known")
     venue_id: Optional[str] = Field(None, description="Optional venue identifier for analytics")
+    wine_id: Optional[str] = Field(
+        None,
+        description=(
+            "Optional catalog wine ID (from GET /search). When supplied the "
+            "identification step is skipped and this wine is used directly, "
+            "ensuring the result matches exactly what was shown in autocomplete."
+        ),
+    )
 
 
 class BatchAnalyzeRequest(BaseModel):

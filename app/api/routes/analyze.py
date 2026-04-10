@@ -48,7 +48,28 @@ async def _run_analysis(
     start = time.monotonic()
 
     # ── 1. Identify wine ────────────────────────────────────────────────────
-    best, alternatives = identify_wine(req.menu_text, vintage_override=req.vintage)
+    # If the caller supplies a wine_id (e.g. picked from autocomplete) we skip
+    # fuzzy re-identification and use that wine directly.  This guarantees the
+    # result always matches what the autocomplete showed.
+    if req.wine_id:
+        from app.services.wine_identifier import get_wine_by_id_full, _confidence_level
+        from app.services.wine_identifier import WineMatch
+        pinned = get_wine_by_id_full(req.wine_id)
+        if pinned:
+            from app.services.text_parser import parse_wine_text
+            _parsed = parse_wine_text(req.menu_text)
+            _vintage = req.vintage or _parsed.vintage
+            best = WineMatch(
+                wine=pinned,
+                score=1.0,
+                confidence_level="very_high",
+                score_breakdown={"pinned_wine_id": req.wine_id},
+            )
+            alternatives = []
+        else:
+            best, alternatives = identify_wine(req.menu_text, vintage_override=req.vintage)
+    else:
+        best, alternatives = identify_wine(req.menu_text, vintage_override=req.vintage)
 
     # Build IdentificationResult
     ident = _build_identification(req.menu_text, best, alternatives, vintage_override=req.vintage)
