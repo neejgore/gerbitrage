@@ -72,7 +72,7 @@ async def get_pricing(
     """
     cache_key = pricing_cache_key(wine_id, vintage)
     cached = await cache_get(cache_key)
-    if cached:
+    if cached and cached.get("source") != "no_data":
         logger.debug("Cache hit for %s", cache_key)
         return PricingBreakdown(**cached)
 
