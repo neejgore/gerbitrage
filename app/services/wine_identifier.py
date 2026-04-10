@@ -392,3 +392,15 @@ def search_wines(
 
 def get_wine_by_id(wine_id: str) -> Optional[WineCatalogEntry]:
     return WINE_CATALOG_BY_ID.get(wine_id)
+
+
+def get_wine_by_id_full(wine_id: str) -> Optional[WineCatalogEntry]:
+    """Look up a wine by ID from both the static catalog and the extended
+    (dynamically-discovered) catalog loaded into the live search index."""
+    static = WINE_CATALOG_BY_ID.get(wine_id)
+    if static:
+        return static
+    for entry in _INDEX:
+        if entry.wine.id == wine_id:
+            return entry.wine
+    return None

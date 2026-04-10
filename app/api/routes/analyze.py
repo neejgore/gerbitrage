@@ -59,8 +59,8 @@ async def _run_analysis(
     dynamic_pricing: Optional[DynamicPricingResult] = None
 
     if ident.matched and ident.wine_id:
-        from app.data.wine_catalog import WINE_CATALOG_BY_ID
-        wine = WINE_CATALOG_BY_ID.get(ident.wine_id)
+        from app.services.wine_identifier import get_wine_by_id_full
+        wine = get_wine_by_id_full(ident.wine_id)
         if wine:
             pricing = await get_pricing(
                 wine_id=wine.id,
@@ -163,9 +163,9 @@ async def _run_analysis(
     elif ident.matched and ident.wine_id:
         # Path A2: catalog hit but no live pricing yet — fall back to the
         # catalog's hand-curated reference price so users always see a number.
-        from app.data.wine_catalog import WINE_CATALOG_BY_ID as _CAT
+        from app.services.wine_identifier import get_wine_by_id_full as _get_wine
         from app.services.pricing_aggregator import _estimate_wholesale
-        _wine = _CAT.get(ident.wine_id)
+        _wine = _get_wine(ident.wine_id)
         if _wine and _wine.avg_retail_price and _wine.avg_retail_price > 0:
             _base = _wine.avg_retail_price
             _tier = _wine.price_tier or "mid"
