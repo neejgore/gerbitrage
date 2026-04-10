@@ -160,6 +160,29 @@ async def _run_analysis(
             last_updated=pricing.last_updated,
         )
 
+    elif ident.matched and ident.wine_id:
+        # Path A2: catalog hit but no live pricing yet — fall back to the
+        # catalog's hand-curated reference price so users always see a number.
+        from app.data.wine_catalog import WINE_CATALOG_BY_ID as _CAT
+        from app.services.pricing_aggregator import _estimate_wholesale
+        _wine = _CAT.get(ident.wine_id)
+        if _wine and _wine.avg_retail_price and _wine.avg_retail_price > 0:
+            _base = _wine.avg_retail_price
+            _tier = _wine.price_tier or "mid"
+            effective = EffectivePricing(
+                avg_retail=_base,
+                min_retail=round(_base * 0.85, 2),
+                max_retail=round(_base * 1.15, 2),
+                estimated_wholesale=_estimate_wholesale(_base, _tier),
+                price_tier=_tier,
+                price_source=PriceSource.catalog,
+                price_basis_note=(
+                    f"Catalog reference price for '{_wine.name}'. "
+                    f"Live market data not yet cached — refresh for a real-time quote."
+                ),
+                data_confidence="low",
+            )
+
     elif dynamic_pricing:
         # Path B: catalog miss → dynamic lookup
         ds = dynamic_pricing.data_source

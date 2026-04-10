@@ -534,11 +534,12 @@ function renderCard(p){
   const vintStr=p.vintage?` ${p.vintage}`:'';
   const tags=[p.region,p.varietal].filter(Boolean).map(t=>`<span class="tag">${t}</span>`).join('');
 
+  const isCatalogRef=p.source==='catalog';
   const priceHTML=hasPrice?`
     <div class="rc-prices">
       <div class="price-col">
-        <div class="price-label">Retail (avg)</div>
-        <div class="price-value green">${fmt(p.retail)}</div>
+        <div class="price-label">Retail (avg)${isCatalogRef?' <span style="font-size:10px;opacity:.6">(ref)</span>':''}</div>
+        <div class="price-value ${isCatalogRef?'':'green'}" style="${isCatalogRef?'color:var(--amber)':''}">${fmt(p.retail)}</div>
         ${p.minRetail&&p.maxRetail?`<div class="price-range">Range ${fmt(p.minRetail)} – ${fmt(p.maxRetail)}</div>`:''}
       </div>
       <div class="price-col">
@@ -564,7 +565,8 @@ function renderCard(p){
     </div>
     ${priceHTML}
     <div class="rc-footer">
-      ${hasPrice?`<span><strong>Data:</strong> ${p.dataConf||'—'}</span>`:''}
+      ${hasPrice?`<span><strong>Data:</strong> ${isCatalogRef?'catalog reference':p.dataConf||'—'}</span>`:''}
+      ${isCatalogRef?`<span style="color:var(--amber)">Catalog reference — live market data pending</span>`:''}
       ${p.isEstimate?`<span style="color:var(--amber)">Regional estimate — not live market data</span>`:''}
       <div class="rc-footer-right">${vivinoBtn(vqName)}</div>
     </div>
