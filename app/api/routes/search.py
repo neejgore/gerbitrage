@@ -9,6 +9,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
+from app.data.wine_catalog import WINE_CATALOG_BY_ID
 from app.schemas.wine import WineSearchResponse, WineSearchResult
 from app.services.wine_identifier import search_wines
 from app.integrations.vivino import _price_cache
@@ -28,6 +29,43 @@ def _producer_key(producer: str) -> str:
     ascii_str = "".join(c for c in nfkd if unicodedata.category(c) != "Mn")
     stripped = _PRODUCER_NOISE.sub("", ascii_str)
     return re.sub(r"\s{2,}", " ", stripped).strip()
+
+
+def _normalize_simple(s: str) -> str:
+    """Lowercase + strip accents, for prefix comparison."""
+    nfkd = unicodedata.normalize("NFD", s.lower())
+    return "".join(c for c in nfkd if unicodedata.category(c) != "Mn")
+
+
+def _autocomplete_boost(q_norm: str, wine_id: str, wine_name: str, producer: str) -> float:
+    """
+    Extra score applied on top of the fuzzy match score for autocomplete ranking.
+
+    Two signals:
+    1. Prefix match: the query is a prefix of the wine name or producer name.
+       Rewards typing "biz" → "Bizot" over a random wine called "Bi".
+       Boost scales with query length (short queries get less).
+
+    2. Static catalog: wines in the hand-curated static catalog get a fixed
+       bump over dynamically-discovered extended-catalog entries.  This keeps
+       well-known wines (Bizot, DRC, Opus One…) above obscure Vivino-scraped
+       entries with short names.
+    """
+    boost = 0.0
+
+    name_norm = _normalize_simple(wine_name)
+    prod_norm = _normalize_simple(producer)
+    if name_norm.startswith(q_norm) or prod_norm.startswith(q_norm):
+        boost += min(0.05 + len(q_norm) * 0.02, 0.15)
+
+    if wine_id in WINE_CATALOG_BY_ID:
+        boost += 0.20
+    elif len(wine_name.strip()) < 4:
+        # Very short names in the extended catalog (e.g. "Bi", "Bigi") are
+        # almost always low-quality discovery artifacts; suppress them.
+        boost -= 0.30
+
+    return boost
 
 
 def _best_price(wine_id: str) -> Optional[float]:
@@ -58,18 +96,23 @@ async def search(
     catalog base price is used.
     Use this endpoint to look up wines before calling `/analyze`.
     """
-    # Fetch more candidates than the limit so deduplication doesn't shrink the
-    # final list below what the caller wants.
-    matches = search_wines(q, limit=limit * 3, wine_type=wine_type, country=country)
+    # Fetch a generous pool so deduplication doesn't shrink results below limit.
+    pool = search_wines(q, limit=limit * 4, wine_type=wine_type, country=country)
 
-    # Deduplicate: when the catalog has multiple entries for the same wine
-    # (e.g. vintage-specific extended-catalog entries alongside the base static
-    # entry), keep only the highest-scoring one per (name, producer-key) pair.
-    # Results from search_wines are already sorted by score descending, so the
-    # first occurrence of each pair is always the best match.
+    # Re-rank: apply prefix-match and static-catalog boosts so curated wines
+    # like "Bizot" surface above obscure extended-catalog entries like "Bi".
+    q_norm = _normalize_simple(q.strip())
+    boosted = [
+        (m.score + _autocomplete_boost(q_norm, m.wine.id, m.wine.name, m.wine.producer), m)
+        for m in pool
+    ]
+    boosted.sort(key=lambda x: x[0], reverse=True)
+
+    # Deduplicate: keep only the highest-scoring entry per (name, producer-key)
+    # pair so that vintage-specific extended-catalog clones don't eat all slots.
     seen_pairs: set[tuple[str, str]] = set()
     results: list[WineSearchResult] = []
-    for m in matches:
+    for boosted_score, m in boosted:
         pair = (m.wine.name.lower(), _producer_key(m.wine.producer))
         if pair in seen_pairs:
             continue
@@ -86,7 +129,7 @@ async def search(
                 wine_type=m.wine.wine_type,
                 avg_retail_price=_best_price(m.wine.id),
                 price_tier=m.wine.price_tier,
-                match_score=round(m.score, 4),
+                match_score=round(boosted_score, 4),
             )
         )
         if len(results) >= limit:
