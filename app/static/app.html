@@ -403,8 +403,15 @@ function hideAc(){
 function pickAc(idx){
   const item=_acItems[idx]; if(!item)return;
   const inp=document.getElementById('searchInput');
-  const nl=item.name.toLowerCase(),pl=(item.producer||'').toLowerCase();
-  inp.value=(item.producer&&!nl.includes(pl))?`${item.producer} ${item.name}`:item.name;
+  const nl=item.name.toLowerCase();
+  // Strip boilerplate producer suffixes before comparing so "Opus One Winery"
+  // normalises to "opus one" and we don't create "Opus One Winery Opus One".
+  const pl=(item.producer||'').toLowerCase()
+    .replace(/\b(winery|wineries|winemakers?|vineyards?|vineyard|cellars|estates?|estate)\b/g,'')
+    .replace(/\s{2,}/g,' ').trim();
+  // Prepend producer only when it adds disambiguation (not already in the name,
+  // and the stripped producer key isn't itself contained in the wine name).
+  inp.value=(item.producer&&pl&&!nl.includes(pl)&&!pl.includes(nl))?`${item.producer} ${item.name}`:item.name;
   hideAc(); doSearch();
 }
 

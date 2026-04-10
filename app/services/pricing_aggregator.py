@@ -88,7 +88,11 @@ async def get_pricing(
     breakdown = _aggregate(valid_results, vintage, avg_retail_base, price_tier)
 
     # ── Cache ──────────────────────────────────────────────────────────────
-    await cache_set(cache_key, breakdown.model_dump())
+    # Only cache results that have real pricing data. Caching a no_data result
+    # would permanently hide prices that become available in the Vivino file
+    # cache after the Redis entry was written.
+    if breakdown.source != "no_data":
+        await cache_set(cache_key, breakdown.model_dump())
 
     return breakdown
 
