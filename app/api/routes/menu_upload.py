@@ -35,24 +35,117 @@ def _pdf_to_text(data: bytes) -> str:
     return "\n".join(pages)
 
 
-def _image_to_text(data: bytes) -> str:
+_CLAUDE_PROMPT = """\
+You are extracting wine entries from a restaurant wine list photo.
+
+For EVERY wine that has a visible price, output exactly one line in this format:
+  WINE NAME | VINTAGE | PRICE
+
+Rules:
+- WINE NAME: producer + wine name as printed (e.g. "Opus One", "Château Margaux", "Stag's Leap Wine Cellars Artemis")
+- VINTAGE: 4-digit year (e.g. 2019) or NV for non-vintage; write NONE if no vintage is shown
+- PRICE: the number only, no $ sign, no commas (e.g. 145 or 1250.00)
+- Skip cocktails, spirits, beer, food, and any item without a price
+- Output ONLY the data lines, no headers, no explanations
+
+Example output:
+Opus One | 2019 | 290
+Krug Grande Cuvée | NV | 380
+Stag's Leap Artemis Cabernet | 2021 | 95
+"""
+
+
+async def _image_to_text_claude(data: bytes, media_type: str = "image/jpeg") -> str:
+    """Use Claude Vision to extract wine list entries from an image."""
+    import base64
+    import os
+    import anthropic
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY not set")
+
+    b64 = base64.standard_b64encode(data).decode()
+    client = anthropic.AsyncAnthropic(api_key=api_key)
+
+    message = await client.messages.create(
+        model="claude-3-5-haiku-20241022",
+        max_tokens=2048,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": media_type,
+                            "data": b64,
+                        },
+                    },
+                    {"type": "text", "text": _CLAUDE_PROMPT},
+                ],
+            }
+        ],
+    )
+    return message.content[0].text if message.content else ""
+
+
+def _parse_claude_output(raw: str) -> list[dict]:
+    """
+    Convert Claude's structured output (Name | Vintage | Price) into the same
+    list-of-dicts format that _parse_wines produces.
+    """
+    entries: list[dict] = []
+    seen: set[tuple] = set()
+    for line in raw.splitlines():
+        line = line.strip().strip("-").strip()
+        if "|" not in line:
+            continue
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) < 3:
+            continue
+        desc, vintage_raw, price_raw = parts[0], parts[1], parts[2]
+        if not desc or len(desc) < 3:
+            continue
+        try:
+            price = float(price_raw.replace(",", "").replace("$", ""))
+        except ValueError:
+            continue
+        if not (8 <= price <= 50_000):
+            continue
+        vintage_raw = vintage_raw.upper().strip()
+        if vintage_raw in ("NONE", "N/A", "", "-"):
+            vintage: int | None = None
+        elif vintage_raw in ("NV", "MV"):
+            vintage = None
+        elif re.match(r"^(?:19|20)\d{2}$", vintage_raw):
+            vintage = int(vintage_raw)
+        else:
+            vintage = None
+        key = (desc.lower()[:45], vintage, int(price))
+        if key in seen:
+            continue
+        seen.add(key)
+        entries.append({"desc": desc, "vintage": vintage, "menu_price": price})
+    return entries
+
+
+def _image_to_text_tesseract(data: bytes) -> str:
+    """Fallback OCR using Tesseract (used when Claude is unavailable)."""
     try:
         from PIL import Image, ImageFilter, ImageEnhance, ImageOps
         import pytesseract
     except ImportError:
         raise HTTPException(
             status_code=422,
-            detail=(
-                "Image OCR requires pytesseract. "
-                "Please upload a PDF instead, or install pytesseract on the server."
-            ),
+            detail="Image OCR is unavailable. Please upload a PDF instead.",
         )
-    # Register HEIC/HEIF support when pillow-heif is installed (iPhone photos).
     try:
         from pillow_heif import register_heif_opener
         register_heif_opener()
     except ImportError:
-        pass  # pillow-heif optional; JPEG/PNG still work without it
+        pass
 
     try:
         img = Image.open(io.BytesIO(data)).convert("RGB")
@@ -61,38 +154,20 @@ def _image_to_text(data: bytes) -> str:
             status_code=422,
             detail=f"Could not open image ({exc}). Supported formats: JPG, PNG, HEIC, WebP.",
         )
-
-    # ── Image preprocessing ────────────────────────────────────────────────
-    # Resize very large phone photos. Tesseract works best around 1500–2500px
-    # on the long edge; phone cameras produce 12–50 MP images.
     max_px = 2400
     if max(img.width, img.height) > max_px:
         img.thumbnail((max_px, max_px), Image.LANCZOS)
-
-    # Upscale very small images — Tesseract needs at least ~150 DPI equivalent.
     min_px = 800
     if max(img.width, img.height) < min_px:
         scale = min_px / max(img.width, img.height)
-        img = img.resize(
-            (int(img.width * scale), int(img.height * scale)), Image.LANCZOS
-        )
-
-    # Convert to grayscale for better OCR accuracy
+        img = img.resize((int(img.width * scale), int(img.height * scale)), Image.LANCZOS)
     img = img.convert("L")
-    # Boost contrast and auto-level, then sharpen
     img = ImageOps.autocontrast(img, cutoff=2)
     img = ImageEnhance.Contrast(img).enhance(1.5)
     img = img.filter(ImageFilter.SHARPEN)
-
-    # PSM 4 = single column of text of variable sizes — best for wine lists.
-    # OEM 1 = LSTM neural net only (most accurate modern engine).
-    config = "--psm 4 --oem 1"
-    text = pytesseract.image_to_string(img, config=config)
-
-    # If PSM 4 produces almost nothing, retry with PSM 6 (uniform block).
+    text = pytesseract.image_to_string(img, config="--psm 4 --oem 1")
     if len(text.strip()) < 50:
         text = pytesseract.image_to_string(img, config="--psm 6 --oem 1")
-
     return text
 
 
@@ -399,24 +474,79 @@ async def upload_menu(file: UploadFile = File(...)) -> MenuUploadResponse:
     content_type = (file.content_type or "").lower()
     data = await file.read()
 
-    # Detect and extract text
+    # Determine media type for Claude
+    _ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+    _mime_map = {
+        "jpg": "image/jpeg", "jpeg": "image/jpeg",
+        "png": "image/png", "webp": "image/webp",
+        "heic": "image/jpeg", "heif": "image/jpeg",  # Claude accepts HEIC as JPEG after conversion
+        "gif": "image/gif",
+    }
+    media_type = _mime_map.get(_ext, "image/jpeg")
+
     is_pdf = filename.lower().endswith(".pdf") or "pdf" in content_type
     is_image = any(
         filename.lower().endswith(ext)
         for ext in (".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".tif", ".tiff")
     ) or content_type.startswith("image/")
 
+    # ── Image path: Claude Vision first, Tesseract as fallback ────────────
+    if is_image:
+        import os
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            try:
+                # HEIC/HEIF: convert to JPEG bytes before sending to Claude
+                if _ext in ("heic", "heif"):
+                    try:
+                        from pillow_heif import register_heif_opener
+                        register_heif_opener()
+                    except ImportError:
+                        pass
+                    from PIL import Image as _PILImage
+                    _buf = io.BytesIO()
+                    _PILImage.open(io.BytesIO(data)).convert("RGB").save(_buf, format="JPEG", quality=90)
+                    _img_data = _buf.getvalue()
+                    media_type = "image/jpeg"
+                else:
+                    _img_data = data
+
+                claude_raw = await _image_to_text_claude(_img_data, media_type)
+                logger.debug("Claude raw output for '%s':\n%s", filename, claude_raw[:800])
+                wines = _parse_claude_output(claude_raw)
+                logger.info("Claude extracted %d wine entries from '%s'", len(wines), filename)
+                if not wines:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=(
+                            f"No wine entries with prices found in '{filename}'. "
+                            "Make sure the photo shows a wine list with prices clearly visible."
+                        ),
+                    )
+                return await _run_batch_from_entries(wines, filename)
+            except HTTPException:
+                raise
+            except Exception as exc:
+                logger.warning("Claude Vision failed for '%s': %s — falling back to Tesseract", filename, exc)
+                # Fall through to Tesseract below
+
+        # Tesseract fallback (or if no API key)
+        try:
+            text = _image_to_text_tesseract(data)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Could not read image: {exc}") from exc
+        return await _run_batch(text, filename)
+
+    # ── PDF / URL path ─────────────────────────────────────────────────────
     try:
         if is_pdf:
             text = _pdf_to_text(data)
-        elif is_image:
-            text = _image_to_text(data)
         else:
-            # Unknown type — attempt PDF first, fall back to image OCR
             try:
                 text = _pdf_to_text(data)
             except Exception:
-                text = _image_to_text(data)
+                text = _image_to_text_tesseract(data)
     except HTTPException:
         raise
     except Exception as exc:
@@ -425,7 +555,13 @@ async def upload_menu(file: UploadFile = File(...)) -> MenuUploadResponse:
     return await _run_batch(text, filename)
 
 
-# ── Shared batch-analysis helper ───────────────────────────────────────────────
+# ── Shared batch-analysis helpers ─────────────────────────────────────────────
+
+async def _run_batch_from_entries(wines: list[dict], source_name: str) -> MenuUploadResponse:
+    """Batch-analyze pre-parsed wine entries (e.g. from Claude Vision)."""
+    wines = wines[:150]
+    return await _batch_analyze(wines, source_name)
+
 
 async def _run_batch(text: str, source_name: str) -> MenuUploadResponse:
     """Parse wine entries from text and batch-analyze them. Shared by file and URL endpoints."""
@@ -442,6 +578,11 @@ async def _run_batch(text: str, source_name: str) -> MenuUploadResponse:
             ),
         )
     wines = wines[:150]
+    return await _batch_analyze(wines, source_name)
+
+
+async def _batch_analyze(wines: list[dict], source_name: str) -> MenuUploadResponse:
+    """Run parallel analysis on a list of pre-validated wine dicts."""
     sem = asyncio.Semaphore(10)
 
     async def _analyze(w: dict) -> MenuWineResult:
