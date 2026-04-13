@@ -358,6 +358,7 @@ function dealBadge(r){
 }
 
 function showErr(el,msg){el.innerHTML=`<div class="error-box">⚠️ ${msg}</div>`;}
+function fmtDetail(d){return Array.isArray(d)?d.map(e=>e.msg||JSON.stringify(e)).join('; '):(d||'Server error');}
 
 function vivinoURL(q){return`https://www.vivino.com/search/wines?q=${encodeURIComponent(q)}`;}
 function vivinoBtn(q,label='Search on Vivino'){
@@ -383,7 +384,9 @@ async function fetchAc(q){
     const d=await r.json();
     _acItems=(d.results||[]).filter(r=>r.match_score>0.45);
     renderAc();
-  }catch(e){}
+  }catch(e){
+    console.warn('Autocomplete error:',e);
+  }
 }
 
 function renderAc(){
@@ -462,7 +465,7 @@ async function doSearch(isRetry){
     if(_pickedWineId)body.wine_id=_pickedWineId;
     const res=await fetch('/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const data=await res.json();
-    if(!res.ok){showErr(out,data.detail||'Server error');return;}
+    if(!res.ok){showErr(out,fmtDetail(data.detail));return;}
     out.innerHTML=renderResult(data,query,isRetry);
   }catch(e){showErr(out,'Network error — check server status.');}
   finally{btn.disabled=false;}
@@ -634,7 +637,7 @@ async function uploadFile(file){
     const data=await res.json();
     if(!res.ok){
       _setDropZone('error');
-      showErr(out,data.detail||'Server error');
+      showErr(out,fmtDetail(data.detail));
       return;
     }
     _setDropZone('idle');
@@ -660,7 +663,7 @@ async function analyzeUrl(){
       body:JSON.stringify({url})
     });
     const data=await res.json();
-    if(!res.ok){showErr(out,data.detail||'Server error');return;}
+    if(!res.ok){showErr(out,fmtDetail(data.detail));return;}
     currentResults=data.results||[];currentFilter='all';
     renderUpload(out,data);
   }catch(e){showErr(out,'Request failed — '+e.message);}

@@ -88,7 +88,10 @@ async def _image_to_text_claude(data: bytes, media_type: str = "image/jpeg") -> 
             }
         ],
     )
-    return message.content[0].text if message.content else ""
+    for block in (message.content or []):
+        if hasattr(block, "text"):
+            return block.text
+    return ""
 
 
 def _parse_claude_output(raw: str) -> list[dict]:
@@ -601,10 +604,10 @@ async def _batch_analyze(wines: list[dict], source_name: str) -> MenuUploadRespo
                 raw_text=w["desc"], vintage=w["vintage"], menu_price=w["menu_price"],
                 matched=ident.matched, wine_name=ident.name, producer=ident.producer,
                 region=ident.region, varietal=ident.varietal,
-                retail_price=round(retail, 2) if retail else None,
-                wholesale_est=round(ep.estimated_wholesale, 2) if ep and ep.estimated_wholesale else None,
+                retail_price=round(retail, 2) if retail is not None else None,
+                wholesale_est=round(ep.estimated_wholesale, 2) if ep and ep.estimated_wholesale is not None else None,
                 min_retail=ep.min_retail if ep else None, max_retail=ep.max_retail if ep else None,
-                markup=round(markup, 2) if markup else None,
+                markup=round(markup, 2) if markup is not None else None,
                 confidence=ident.confidence, confidence_level=ident.confidence_level,
                 deal_rating=_deal_rating(markup),
                 data_confidence=ep.data_confidence if ep else None,

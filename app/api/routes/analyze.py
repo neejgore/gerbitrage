@@ -229,9 +229,11 @@ async def _run_analysis(
             # plain regional_proxy
             source_enum = PriceSource.regional_estimate
             confidence_level = "low"
+            _lo = f"${dynamic_pricing.min_retail:.0f}" if dynamic_pricing.min_retail is not None else "?"
+            _hi = f"${dynamic_pricing.max_retail:.0f}" if dynamic_pricing.max_retail is not None else "?"
             basis_note = (
                 f"Regional bucket estimate only – producer unknown. "
-                f"Range: ${dynamic_pricing.min_retail:.0f}–${dynamic_pricing.max_retail:.0f}. "
+                f"Range: {_lo}–{_hi}. "
                 f"Wide confidence interval; verify before acting."
             )
 
