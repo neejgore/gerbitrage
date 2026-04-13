@@ -359,6 +359,7 @@ function dealBadge(r){
 
 function showErr(el,msg){el.innerHTML=`<div class="error-box">⚠️ ${msg}</div>`;}
 function fmtDetail(d){return Array.isArray(d)?d.map(e=>e.msg||JSON.stringify(e)).join('; '):(d||'Server error');}
+async function safeJson(res){try{return await res.json();}catch(e){return {detail:'Server error ('+res.status+')'};}}
 
 function vivinoURL(q){return`https://www.vivino.com/search/wines?q=${encodeURIComponent(q)}`;}
 function vivinoBtn(q,label='Search on Vivino'){
@@ -464,7 +465,7 @@ async function doSearch(isRetry){
     if(vintage)body.vintage=parseInt(vintage);
     if(_pickedWineId)body.wine_id=_pickedWineId;
     const res=await fetch('/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    const data=await res.json();
+    const data=await safeJson(res);
     if(!res.ok){showErr(out,fmtDetail(data.detail));return;}
     out.innerHTML=renderResult(data,query,isRetry);
   }catch(e){showErr(out,'Network error — check server status.');}
@@ -634,7 +635,7 @@ async function uploadFile(file){
   form.append('file',file);
   try{
     const res=await fetch('/menu/upload',{method:'POST',body:form});
-    const data=await res.json();
+    const data=await safeJson(res);
     if(!res.ok){
       _setDropZone('error');
       showErr(out,fmtDetail(data.detail));
@@ -662,7 +663,7 @@ async function analyzeUrl(){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({url})
     });
-    const data=await res.json();
+    const data=await safeJson(res);
     if(!res.ok){showErr(out,fmtDetail(data.detail));return;}
     currentResults=data.results||[];currentFilter='all';
     renderUpload(out,data);
@@ -713,7 +714,7 @@ function buildTable(results,filter){
   rows.sort((a,b)=>(ord[a.deal_rating]||4)-(ord[b.deal_rating]||4));
   const trs=rows.map(r=>{
     const dn=r.wine_name||r.raw_text;
-    const mc=r.markup?(r.markup<0.8?'var(--green)':r.markup<=1.5?'#6ee7b7':r.markup<=2.5?'var(--amber)':'var(--red)'):'var(--muted)';
+    const mc=r.markup!=null?(r.markup<0.8?'var(--green)':r.markup<=1.5?'#6ee7b7':r.markup<=2.5?'var(--amber)':'var(--red)'):'var(--muted)';
     return`<tr class="${!r.matched?'dim':''}">
       <td style="max-width:220px"><div class="wn">${dn}</div>${r.producer?`<div class="wp">${r.producer}</div>`:''}</td>
       <td>${r.vintage||'NV'}</td>

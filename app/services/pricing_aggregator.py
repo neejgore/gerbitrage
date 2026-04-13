@@ -72,9 +72,12 @@ async def get_pricing(
     """
     cache_key = pricing_cache_key(wine_id, vintage)
     cached = await cache_get(cache_key)
-    if cached and cached.get("source") != "no_data":
+    if isinstance(cached, dict) and cached.get("source") != "no_data":
         logger.debug("Cache hit for %s", cache_key)
-        return PricingBreakdown(**cached)
+        try:
+            return PricingBreakdown(**cached)
+        except Exception as exc:
+            logger.warning("Stale/invalid cache entry for %s, re-fetching: %s", cache_key, exc)
 
     # ── Fan out ────────────────────────────────────────────────────────────
     tasks = [

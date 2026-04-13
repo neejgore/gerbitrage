@@ -668,8 +668,29 @@ async def menu_from_url(req: UrlMenuRequest) -> MenuUploadResponse:
         _ext2 = url_lower.rsplit(".", 1)[-1] if "." in url_lower else "jpeg"
         _mime2 = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
                   "webp": "image/webp"}.get(_ext2, "image/jpeg")
+        _img_bytes = data
+        # HEIC from URL: convert to JPEG before sending to Claude
+        if _ext2 in ("heic", "heif"):
+            try:
+                from pillow_heif import register_heif_opener
+                register_heif_opener()
+            except ImportError:
+                pass
+            try:
+                from PIL import Image as _PILImage
+                _buf = io.BytesIO()
+                _PILImage.open(io.BytesIO(data)).convert("RGB").save(_buf, format="JPEG", quality=90)
+                _img_bytes = _buf.getvalue()
+                _mime2 = "image/jpeg"
+            except Exception:
+                pass
+        # Also use content-type header if extension is unknown
+        elif not _ext2 or _mime2 == "image/jpeg":
+            _ct_mime = content_type.lower().split(";")[0].strip()
+            if _ct_mime in ("image/png", "image/webp", "image/gif"):
+                _mime2 = _ct_mime
         try:
-            claude_raw = await _image_to_text_claude(data, _mime2)
+            claude_raw = await _image_to_text_claude(_img_bytes, _mime2)
             wines = _parse_claude_output(claude_raw)
             if wines:
                 return await _run_batch_from_entries(wines, source_name)
