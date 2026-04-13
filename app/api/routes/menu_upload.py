@@ -144,16 +144,22 @@ def _extract_text_from_url_content(data: bytes, content_type: str, url: str) -> 
 
 # ── Wine-entry parsing ─────────────────────────────────────────────────────────
 
-# Matches lines ending in "YEAR PRICE" or "NV PRICE" or "MV PRICE"
-_WINE_RE = re.compile(
-    r"^(.{8,}?)\s+((?:19|20)\d{2}|NV|MV)\s+\$?(\d+(?:\.\d{1,2})?)\s*$"
-)
+# Visual fill characters used in printed menus as leaders (dots, dashes, etc.)
+_FILL_RE = re.compile(r"[.\-_·•*]{3,}")
+
+# Vintage token: 19xx / 20xx, NV, MV
+_VINTAGE_RE = re.compile(r"\b((?:19|20)\d{2}|NV|MV)\b", re.I)
+
+# Price token: $NNN, NNN, NNN.NN  (2–5 digits, no year-shaped numbers)
+_PRICE_RE = re.compile(r"(?<!\d)\$?(\d{2,5}(?:\.\d{1,2})?)(?!\d)")
+
 _SKIP_RE = re.compile(
-    r"^(\d+$|BY THE GLASS|HALF BOTTLE|SPARKLING$|ROSE$|WHITE$|RED$|BEER"
+    r"^(\d+$|BY THE GLASS|HALF BOTTLE|SPARKLING$|ROSE$|ROSÉ$|WHITE$|RED$|BEER"
     r"|COCKTAIL|MOCKTAIL|SPIRIT|VODKA|GIN|TEQUILA|MEZCAL|RUM|BOURBON"
     r"|WHISKEY|SCOTCH|COGNAC|CHARDONNAY|PINOT NOIR|CABERNET|ZINFANDEL"
     r"|FRANCE$|SPAIN$|ITALY$|GERMANY$|AUSTRIA$|CHAMPAGNE$|BURGUNDY$"
-    r"|BORDEAUX$|DESSERT$|FORTIFIED$|MERLOT$|SYRAH$|SAUVIGNON BLANC$)",
+    r"|BORDEAUX$|DESSERT$|FORTIFIED$|MERLOT$|SYRAH$|SAUVIGNON BLANC$"
+    r"|PAGE\s*\d|TABLE\s*OF\s*CONTENTS|WINE\s*LIST|^\d{1,3}$)",
     re.I,
 )
 _SPIRITS_KW = (
@@ -163,28 +169,115 @@ _SPIRITS_KW = (
 )
 
 
+def _clean_line(raw: str) -> str:
+    """Strip visual fill characters and collapse whitespace."""
+    line = _FILL_RE.sub(" ", raw)
+    return re.sub(r"\s{2,}", " ", line).strip()
+
+
+def _is_wine_price(val: float) -> bool:
+    return 8 <= val <= 50_000
+
+
 def _parse_wines(text: str) -> list[dict]:
+    """
+    Extract (desc, vintage, menu_price) triples from raw OCR / PDF text.
+
+    Handles the many formats found on restaurant wine lists:
+      • "Name 2019 145"          – classic year+price on one line
+      • "Name ........... 145"   – price without year (dots as leaders)
+      • "Name $145"              – explicit $ sign, no year
+      • "Name 2019"  / "145"     – name+year on one line, price on next
+      • "Name"  / "2019  145"    – name alone, year+price on next line
+    """
+    lines = [_clean_line(l) for l in text.splitlines() if _clean_line(l)]
     entries: list[dict] = []
     seen: set[tuple] = set()
-    for line in text.splitlines():
-        line = line.strip()
-        m = _WINE_RE.match(line)
-        if not m:
-            continue
-        desc, vintage_str, price_str = m.group(1).strip(), m.group(2), m.group(3)
-        if _SKIP_RE.match(desc) or len(desc) < 10:
-            continue
+    used: set[int] = set()  # line indices consumed as part of a multi-line match
+
+    def _add(desc: str, vintage_str: str | None, price: float, idx: int) -> None:
+        desc = re.sub(r"\s*[|\-–—,;:]+\s*$", "", desc).strip()
+        # Strip trailing year tokens that ended up in the desc
+        desc = re.sub(r"\s+((?:19|20)\d{2}|NV|MV)\s*$", "", desc, flags=re.I).strip()
+        if not desc or len(desc) < 5:
+            return
+        if _SKIP_RE.match(desc):
+            return
         if any(kw in desc.lower() for kw in _SPIRITS_KW):
-            continue
-        menu_price = float(price_str)
-        if menu_price < 10 or menu_price > 50_000:
-            continue
-        vintage = int(vintage_str) if vintage_str.isdigit() else None
-        key = (desc.lower()[:45], vintage, int(menu_price))
+            return
+        if not _is_wine_price(price):
+            return
+        vintage = int(vintage_str) if vintage_str and vintage_str.isdigit() else None
+        key = (desc.lower()[:45], vintage, int(price))
         if key in seen:
-            continue
+            return
         seen.add(key)
-        entries.append({"desc": desc, "vintage": vintage, "menu_price": menu_price})
+        used.add(idx)
+        entries.append({"desc": desc, "vintage": vintage, "menu_price": price})
+
+    # ── Pass 1: everything on one line ─────────────────────────────────────
+    for i, line in enumerate(lines):
+        # Find all price-shaped numbers (exclude 4-digit years)
+        price_tokens = [
+            (m.start(), m.group(1))
+            for m in _PRICE_RE.finditer(line)
+            if not re.match(r"^(?:19|20)\d{2}$", m.group(1))
+            and _is_wine_price(float(m.group(1).replace(",", "")))
+        ]
+        if not price_tokens:
+            continue
+
+        # Use the last price token as the menu price (typically right-aligned)
+        price_pos, price_str = price_tokens[-1]
+        price = float(price_str.replace(",", ""))
+        desc_raw = line[:price_pos].strip()
+
+        # Find vintage in the desc portion
+        vm = list(_VINTAGE_RE.finditer(desc_raw))
+        if vm:
+            vt = vm[-1]
+            desc = (desc_raw[:vt.start()] + desc_raw[vt.end():]).strip()
+            vintage_str: str | None = vt.group(1)
+        else:
+            desc = desc_raw
+            vintage_str = None
+
+        _add(desc, vintage_str, price, i)
+
+    # ── Pass 2: name on one line, price (+optional year) on the next ───────
+    for i in range(len(lines) - 1):
+        if i in used:
+            continue
+        name_line = lines[i]
+        next_line = lines[i + 1]
+
+        # Name line should look like a wine name: no price, not too short
+        if _PRICE_RE.search(name_line):
+            continue
+        if len(name_line) < 5 or _SKIP_RE.match(name_line):
+            continue
+        if any(kw in name_line.lower() for kw in _SPIRITS_KW):
+            continue
+
+        # Next line should have a price
+        price_tokens = [
+            (m.start(), m.group(1))
+            for m in _PRICE_RE.finditer(next_line)
+            if not re.match(r"^(?:19|20)\d{2}$", m.group(1))
+            and _is_wine_price(float(m.group(1).replace(",", "")))
+        ]
+        if not price_tokens:
+            continue
+
+        price_pos, price_str = price_tokens[-1]
+        price = float(price_str.replace(",", ""))
+        rest = next_line[:price_pos].strip()
+
+        vm = list(_VINTAGE_RE.finditer(rest or next_line))
+        vintage_str = vm[-1].group(1) if vm else None
+
+        _add(name_line, vintage_str, price, i)
+
     return entries
 
 
@@ -282,13 +375,16 @@ async def upload_menu(file: UploadFile = File(...)) -> MenuUploadResponse:
 
 async def _run_batch(text: str, source_name: str) -> MenuUploadResponse:
     """Parse wine entries from text and batch-analyze them. Shared by file and URL endpoints."""
+    logger.debug("OCR/extracted text from '%s' (first 1000 chars):\n%s", source_name, text[:1000])
     wines = _parse_wines(text)
+    logger.info("Parsed %d wine entries from '%s'", len(wines), source_name)
     if not wines:
         raise HTTPException(
             status_code=422,
             detail=(
                 f"No wine entries found in '{source_name}'. "
-                "Wine lines should end with a year and price (e.g. '… 2019 145')."
+                "Make sure the image shows a wine list with prices clearly visible. "
+                "For best results, photograph the menu straight-on in good lighting."
             ),
         )
     wines = wines[:150]
