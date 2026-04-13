@@ -70,7 +70,7 @@ async def _image_to_text_claude(data: bytes, media_type: str = "image/jpeg") -> 
 
     message = await client.messages.create(
         model="claude-3-5-haiku-20241022",
-        max_tokens=2048,
+        max_tokens=4096,
         messages=[
             {
                 "role": "user",
@@ -229,7 +229,7 @@ def _extract_text_from_url_content(data: bytes, content_type: str, url: str) -> 
     if is_pdf:
         return _pdf_to_text(data)
     if is_image:
-        return _image_to_text(data)
+        return _image_to_text_tesseract(data)
     # Default: treat as HTML / plain text
     try:
         text = data.decode("utf-8", errors="replace")
@@ -651,8 +651,27 @@ async def menu_from_url(req: UrlMenuRequest) -> MenuUploadResponse:
 
     logger.info("Fetching menu from URL: %s", url[:120])
     data, content_type = await _fetch_url(url)
-    text = _extract_text_from_url_content(data, content_type, url)
 
     # Use the last path segment as a friendly name
     source_name = url.rstrip("/").split("/")[-1].split("?")[0] or url[:60]
+
+    # Route image URLs through Claude Vision if available
+    import os as _os
+    url_lower = url.lower().split("?")[0]
+    is_url_image = content_type.lower().startswith("image/") or any(
+        url_lower.endswith(e) for e in (".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif")
+    )
+    if is_url_image and _os.environ.get("ANTHROPIC_API_KEY"):
+        _ext2 = url_lower.rsplit(".", 1)[-1] if "." in url_lower else "jpeg"
+        _mime2 = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+                  "webp": "image/webp"}.get(_ext2, "image/jpeg")
+        try:
+            claude_raw = await _image_to_text_claude(data, _mime2)
+            wines = _parse_claude_output(claude_raw)
+            if wines:
+                return await _run_batch_from_entries(wines, source_name)
+        except Exception as exc:
+            logger.warning("Claude Vision failed for URL image: %s", exc)
+
+    text = _extract_text_from_url_content(data, content_type, url)
     return await _run_batch(text, source_name)
