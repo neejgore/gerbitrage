@@ -47,9 +47,27 @@ def _image_to_text(data: bytes) -> str:
                 "Please upload a PDF instead, or install pytesseract on the server."
             ),
         )
-    img = Image.open(io.BytesIO(data)).convert("RGB")
+    # Register HEIC/HEIF support when pillow-heif is installed (iPhone photos).
+    try:
+        from pillow_heif import register_heif_opener
+        register_heif_opener()
+    except ImportError:
+        pass  # pillow-heif optional; JPEG/PNG still work without it
+
+    try:
+        img = Image.open(io.BytesIO(data)).convert("RGB")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Could not open image ({exc}). Supported formats: JPG, PNG, HEIC, WebP.",
+        )
+    # Resize very large phone photos before OCR — Tesseract slows exponentially
+    # above ~4 MP and phone cameras can produce 12–50 MP images.
+    max_px = 3000
+    if max(img.width, img.height) > max_px:
+        img.thumbnail((max_px, max_px), Image.LANCZOS)
     # Light sharpening + contrast boost helps with phone photos
-    img = ImageEnhance.Contrast(img).enhance(1.3)
+    img = ImageEnhance.Contrast(img).enhance(1.4)
     img = img.filter(ImageFilter.SHARPEN)
     return pytesseract.image_to_string(img, config="--psm 6")
 
