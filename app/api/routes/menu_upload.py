@@ -37,7 +37,7 @@ def _pdf_to_text(data: bytes) -> str:
 
 def _image_to_text(data: bytes) -> str:
     try:
-        from PIL import Image, ImageFilter, ImageEnhance
+        from PIL import Image, ImageFilter, ImageEnhance, ImageOps
         import pytesseract
     except ImportError:
         raise HTTPException(
@@ -61,15 +61,39 @@ def _image_to_text(data: bytes) -> str:
             status_code=422,
             detail=f"Could not open image ({exc}). Supported formats: JPG, PNG, HEIC, WebP.",
         )
-    # Resize very large phone photos before OCR — Tesseract slows exponentially
-    # above ~4 MP and phone cameras can produce 12–50 MP images.
-    max_px = 3000
+
+    # ── Image preprocessing ────────────────────────────────────────────────
+    # Resize very large phone photos. Tesseract works best around 1500–2500px
+    # on the long edge; phone cameras produce 12–50 MP images.
+    max_px = 2400
     if max(img.width, img.height) > max_px:
         img.thumbnail((max_px, max_px), Image.LANCZOS)
-    # Light sharpening + contrast boost helps with phone photos
-    img = ImageEnhance.Contrast(img).enhance(1.4)
+
+    # Upscale very small images — Tesseract needs at least ~150 DPI equivalent.
+    min_px = 800
+    if max(img.width, img.height) < min_px:
+        scale = min_px / max(img.width, img.height)
+        img = img.resize(
+            (int(img.width * scale), int(img.height * scale)), Image.LANCZOS
+        )
+
+    # Convert to grayscale for better OCR accuracy
+    img = img.convert("L")
+    # Boost contrast and auto-level, then sharpen
+    img = ImageOps.autocontrast(img, cutoff=2)
+    img = ImageEnhance.Contrast(img).enhance(1.5)
     img = img.filter(ImageFilter.SHARPEN)
-    return pytesseract.image_to_string(img, config="--psm 6")
+
+    # PSM 4 = single column of text of variable sizes — best for wine lists.
+    # OEM 1 = LSTM neural net only (most accurate modern engine).
+    config = "--psm 4 --oem 1"
+    text = pytesseract.image_to_string(img, config=config)
+
+    # If PSM 4 produces almost nothing, retry with PSM 6 (uniform block).
+    if len(text.strip()) < 50:
+        text = pytesseract.image_to_string(img, config="--psm 6 --oem 1")
+
+    return text
 
 
 def _html_to_text(html: str) -> str:
@@ -179,6 +203,36 @@ def _is_wine_price(val: float) -> bool:
     return 8 <= val <= 50_000
 
 
+# Characters that are strong indicators of OCR garbage (not found in real wine names)
+_GARBAGE_CHARS = re.compile(r"[~=<>{}\[\]\\|@#%^*_\x00-\x1f]")
+
+def _looks_like_wine_name(desc: str) -> bool:
+    """
+    Return True only if `desc` looks like a plausible wine / producer name.
+    Rejects OCR garbage like 'a af Se ~ OX BSS Ss Yo. f sage. Sy = Sf = < =S'.
+    """
+    if not desc or len(desc) < 4:
+        return False
+    # Reject immediately if it contains hard garbage characters
+    if _GARBAGE_CHARS.search(desc):
+        return False
+    # Must be mostly alphabetic (letters + spaces + common punctuation)
+    alpha = sum(c.isalpha() or c.isspace() for c in desc)
+    if alpha / len(desc) < 0.65:
+        return False
+    # Average word length must be reasonable (real names have longer words)
+    words = [w for w in desc.split() if w.isalpha()]
+    if not words:
+        return False
+    avg_word_len = sum(len(w) for w in words) / len(words)
+    if avg_word_len < 2.8:
+        return False
+    # At least one word of 3+ letters
+    if not any(len(w) >= 3 for w in words):
+        return False
+    return True
+
+
 def _parse_wines(text: str) -> list[dict]:
     """
     Extract (desc, vintage, menu_price) triples from raw OCR / PDF text.
@@ -199,7 +253,7 @@ def _parse_wines(text: str) -> list[dict]:
         desc = re.sub(r"\s*[|\-–—,;:]+\s*$", "", desc).strip()
         # Strip trailing year tokens that ended up in the desc
         desc = re.sub(r"\s+((?:19|20)\d{2}|NV|MV)\s*$", "", desc, flags=re.I).strip()
-        if not desc or len(desc) < 5:
+        if not _looks_like_wine_name(desc):
             return
         if _SKIP_RE.match(desc):
             return
