@@ -36,22 +36,25 @@ def _pdf_to_text(data: bytes) -> str:
 
 
 _CLAUDE_PROMPT = """\
-You are extracting wine entries from a restaurant wine list photo.
+You are a precise OCR tool. Your ONLY job is to read text that is LITERALLY VISIBLE in this wine menu image.
 
-For EVERY wine that has a visible price, output exactly one line in this format:
+CRITICAL RULES — violating these makes the output useless:
+1. ONLY transcribe text you can actually see in the image. DO NOT guess, infer, autocomplete, or invent wine names.
+2. If a word is blurry or unclear, write exactly what you can see — do not substitute a "likely" wine name.
+3. DO NOT use your knowledge of wines to fill in or correct anything.
+
+For each wine that has a visible price, output ONE line:
   WINE NAME | VINTAGE | PRICE
 
-Rules:
-- WINE NAME: producer + wine name as printed (e.g. "Opus One", "Château Margaux", "Stag's Leap Wine Cellars Artemis")
-- VINTAGE: 4-digit year (e.g. 2019) or NV for non-vintage; write NONE if no vintage is shown
-- PRICE: the number only, no $ sign, no commas (e.g. 145 or 1250.00)
-- Skip cocktails, spirits, beer, food, and any item without a price
-- Output ONLY the data lines, no headers, no explanations
+Format rules:
+- WINE NAME: copy the name EXACTLY as printed, character for character
+- VINTAGE: the 4-digit year shown, or NV if printed, or NONE if not shown
+- PRICE: digits only, no $ or commas (e.g. 145 or 1250)
+- Skip anything without a visible price
+- Skip cocktails, spirits, beer, food
+- Output ONLY data lines — no headers, no explanations, no commentary
 
-Example output:
-Opus One | 2019 | 290
-Krug Grande Cuvée | NV | 380
-Stag's Leap Artemis Cabernet | 2021 | 95
+If you cannot confidently read the image (too dark, blurry, not a wine list), output: CANNOT_READ
 """
 
 
@@ -535,7 +538,12 @@ async def upload_menu(file: UploadFile = File(...)) -> MenuUploadResponse:
                     filename, len(_img_data) / 1024,
                 )
                 claude_raw = await _image_to_text_claude(_img_data, media_type)
-                logger.debug("Claude raw output for '%s':\n%s", filename, claude_raw[:800])
+                logger.info("Claude raw output for '%s':\n%s", filename, claude_raw[:1000])
+                if "CANNOT_READ" in claude_raw:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Photo is too dark or blurry to read. Try better lighting or a PDF upload.",
+                    )
                 wines = _parse_claude_output(claude_raw)
                 logger.info("Claude extracted %d wine entries from '%s'", len(wines), filename)
                 if not wines:
