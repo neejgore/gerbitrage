@@ -51,7 +51,11 @@ You are a scanner. Transcribe every line of text visible in this image exactly a
 
 
 async def _image_to_text_claude(data: bytes, media_type: str = "image/jpeg") -> str:
-    """Use Claude Vision to extract wine list entries from an image."""
+    """Use Claude Vision to transcribe a wine menu image.
+
+    Tries models in descending capability order, falling back if the account
+    does not have access to a given model (HTTP 404 not_found_error).
+    """
     import base64
     import os
     import anthropic
@@ -63,30 +67,40 @@ async def _image_to_text_claude(data: bytes, media_type: str = "image/jpeg") -> 
     b64 = base64.standard_b64encode(data).decode()
     client = anthropic.AsyncAnthropic(api_key=api_key)
 
-    message = await client.messages.create(
-        model="claude-3-5-sonnet-20241022",
-        max_tokens=4096,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": media_type,
-                            "data": b64,
-                        },
-                    },
-                    {"type": "text", "text": _CLAUDE_PROMPT},
-                ],
-            }
-        ],
-    )
-    for block in (message.content or []):
-        if hasattr(block, "text"):
-            return block.text
-    return ""
+    _MODELS = [
+        "claude-3-5-sonnet-20241022",  # best vision quality
+        "claude-3-sonnet-20240229",    # older sonnet — still much better than haiku
+        "claude-3-haiku-20240307",     # always available fallback
+    ]
+
+    content = [
+        {
+            "type": "image",
+            "source": {"type": "base64", "media_type": media_type, "data": b64},
+        },
+        {"type": "text", "text": _CLAUDE_PROMPT},
+    ]
+
+    last_err: Exception | None = None
+    for model in _MODELS:
+        try:
+            message = await client.messages.create(
+                model=model,
+                max_tokens=4096,
+                messages=[{"role": "user", "content": content}],
+            )
+            for block in (message.content or []):
+                if hasattr(block, "text"):
+                    return block.text
+            return ""
+        except Exception as exc:
+            # 404 not_found_error means this account can't access the model — try next
+            if "not_found_error" in str(exc) or "404" in str(exc):
+                last_err = exc
+                continue
+            raise  # any other error (auth, rate-limit, etc.) — propagate immediately
+
+    raise RuntimeError(f"No Claude vision model available. Last error: {last_err}")
 
 
 def _parse_claude_output(raw: str) -> list[dict]:

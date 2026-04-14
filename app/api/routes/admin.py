@@ -195,22 +195,36 @@ async def vision_check() -> dict:
         result["status"] = f"FAIL — anthropic package not installed: {e}"
         return result
 
-    # 3. Make a minimal API call (text only, no image)
-    try:
-        import anthropic as _anthropic
-        client = _anthropic.AsyncAnthropic(api_key=api_key)
-        msg = await client.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            max_tokens=10,
-            messages=[{"role": "user", "content": "Reply with the single word: OK"}],
-        )
-        reply = msg.content[0].text if msg.content else "(empty)"
-        result["api_call"] = "success"
-        result["api_reply"] = reply
-        result["status"] = "OK — Claude Vision ready"
-    except Exception as e:
+    # 3. Make a minimal API call — try models in descending quality order
+    _CHECK_MODELS = [
+        "claude-3-5-sonnet-20241022",
+        "claude-3-sonnet-20240229",
+        "claude-3-haiku-20240307",
+    ]
+    for _model in _CHECK_MODELS:
+        try:
+            import anthropic as _anthropic
+            client = _anthropic.AsyncAnthropic(api_key=api_key)
+            msg = await client.messages.create(
+                model=_model,
+                max_tokens=10,
+                messages=[{"role": "user", "content": "Reply with the single word: OK"}],
+            )
+            reply = msg.content[0].text if msg.content else "(empty)"
+            result["api_call"] = "success"
+            result["api_reply"] = reply
+            result["model"] = _model
+            result["status"] = f"OK — Claude Vision ready (model: {_model})"
+            break
+        except Exception as e:
+            if "not_found_error" in str(e) or "404" in str(e):
+                continue
+            result["api_call"] = "failed"
+            result["api_error"] = str(e)
+            result["status"] = f"FAIL — API call error: {e}"
+            break
+    else:
         result["api_call"] = "failed"
-        result["api_error"] = str(e)
-        result["status"] = f"FAIL — API call error: {e}"
+        result["status"] = "FAIL — no Claude model available on this API key"
 
     return result
