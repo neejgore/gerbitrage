@@ -39,9 +39,11 @@ def _pdf_to_text(data: bytes) -> str:
 _EXTRACT_SYSTEM = (
     "You are a menu scanner. Report ONLY text that is literally visible in the image. "
     "Never add, infer, or substitute wine names from your own knowledge. "
-    "Copy names exactly as printed, even if they look unusual."
+    "Copy names exactly as printed, even if they look unusual. "
+    "Include sake, beer, spirits, and other beverages exactly as printed — do not skip them. "
+    "The next step will decide what to keep."
 )
-_EXTRACT_PROMPT = "what wines are listed here?"
+_EXTRACT_PROMPT = "List every beverage item on this menu exactly as printed, including name, vintage, and price."
 
 # ── Step 2: normalise raw names for catalog matching ──────────────────────────
 _NORMALISE_SYSTEM = (
@@ -50,13 +52,16 @@ _NORMALISE_SYSTEM = (
     "can be looked up in a database. Keep the vintage and price unchanged."
 )
 _NORMALISE_PROMPT_TPL = """\
-Here are wines extracted from a menu. Reformat each into:
+Here are items extracted from a wine menu. Reformat WINE entries only into:
 PRODUCER WINE_NAME | VINTAGE | PRICE
 
 Rules:
-- One line per wine
-- If the entry is GRAPE, PRODUCER PRICE (e.g. "AGLIANICO, CONTRADE DI TAURAUSI 20/38"), reformat as "CONTRADE DI TAURAUSI AGLIANICO"
-- Keep the vintage and price exactly as extracted
+- One line per wine, nothing else
+- SKIP any item that is sake, beer, spirits, cocktail, water, juice, tea, coffee, or a flight/package (e.g. "Japan Flight", "3oz of each")
+- SKIP section headers, descriptions, or prices with no wine name
+- If the entry is GRAPE, PRODUCER (e.g. "AGLIANICO, CONTRADE DI TAURAUSI 20/38"), reformat as "CONTRADE DI TAURAUSI AGLIANICO"
+- Keep the vintage and price EXACTLY as extracted — do NOT add, change, or invent any information
+- If a wine name is unclear or non-standard, copy it exactly as printed — never substitute a different wine name
 - Output nothing else
 
 Wines:
@@ -1215,24 +1220,32 @@ async def _batch_analyze(wines: list[dict], source_name: str) -> MenuUploadRespo
                 return MenuWineResult(raw_text=w["desc"], vintage=w["vintage"], menu_price=w["menu_price"], matched=False)
             ep = resp.effective_pricing
             ident = resp.identification
-            retail = ep.avg_retail if ep else None
-            markup = w["menu_price"] / retail if retail else None
-            # Only count as truly matched when confidence is high enough.
-            # Weak matches (medium/low) still surface as best-guess name but
-            # are not counted as confirmed catalog hits.
             strong = ident.matched and ident.confidence_level in ("very_high", "high")
+
+            # Only use retail price when it comes from real data — confirmed
+            # catalog entry or live market fetch. Regional/varietal proxy
+            # estimates are stripped out entirely: showing made-up numbers is
+            # worse than showing nothing.
+            _REAL_SOURCES = {"market_live", "catalog"}
+            src = ep.price_source.value if ep and ep.price_source else ""
+            real_price = src in _REAL_SOURCES
+            retail = (ep.avg_retail if real_price else None) if ep else None
+            wholesale = (ep.estimated_wholesale if real_price else None) if ep else None
+            min_r = (ep.min_retail if real_price else None) if ep else None
+            max_r = (ep.max_retail if real_price else None) if ep else None
+            markup = w["menu_price"] / retail if retail else None
             return MenuWineResult(
                 raw_text=w["desc"], vintage=w["vintage"], menu_price=w["menu_price"],
                 matched=strong, wine_name=ident.name if strong else None, producer=ident.producer if strong else None,
-                region=ident.region, varietal=ident.varietal,
+                region=ident.region if strong else None, varietal=ident.varietal if strong else None,
                 retail_price=round(retail, 2) if retail is not None else None,
-                wholesale_est=round(ep.estimated_wholesale, 2) if ep and ep.estimated_wholesale is not None else None,
-                min_retail=ep.min_retail if ep else None, max_retail=ep.max_retail if ep else None,
+                wholesale_est=round(wholesale, 2) if wholesale is not None else None,
+                min_retail=min_r, max_retail=max_r,
                 markup=round(markup, 2) if markup is not None else None,
                 confidence=ident.confidence, confidence_level=ident.confidence_level,
                 deal_rating=_deal_rating(markup),
-                data_confidence=ep.data_confidence if ep else None,
-                price_source=ep.price_source.value if ep and ep.price_source else None,
+                data_confidence=ep.data_confidence if ep and real_price else None,
+                price_source=src if real_price else None,
             )
 
     results: list[MenuWineResult] = list(await asyncio.gather(*[_analyze(w) for w in wines]))

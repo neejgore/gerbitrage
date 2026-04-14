@@ -108,11 +108,21 @@ async def _run_analysis(
                 )
     else:
         # ── Dynamic lookup for catalog misses or weak matches ─────────────
+        # Only use Wine-Searcher live data (real prices). Regional/varietal
+        # proxy estimates are suppressed — showing invented numbers is worse
+        # than showing nothing. Vivino discovery still fires in the background.
         from app.services.text_parser import parse_wine_text
         parsed = parse_wine_text(req.menu_text)
         if req.vintage:
             parsed.vintage = req.vintage
-        dynamic_pricing = await dynamic_lookup(req.menu_text, parsed)
+        _raw_dynamic = await dynamic_lookup(req.menu_text, parsed)
+        # Only keep the result if it's real live data, not an estimate
+        _REAL_DYNAMIC_SOURCES = {"wine_searcher_live"}
+        dynamic_pricing = (
+            _raw_dynamic
+            if _raw_dynamic and _raw_dynamic.data_source in _REAL_DYNAMIC_SOURCES
+            else None
+        )
 
         if dynamic_pricing and req.menu_price:
             avg = dynamic_pricing.avg_retail
