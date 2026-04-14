@@ -486,7 +486,7 @@ def _image_to_text_tesseract(data: bytes) -> str:
         pass
 
     try:
-    img = Image.open(io.BytesIO(data)).convert("RGB")
+        img = Image.open(io.BytesIO(data)).convert("RGB")
     except Exception as exc:
         raise HTTPException(
             status_code=422,
