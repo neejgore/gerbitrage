@@ -199,8 +199,8 @@ async def vision_check() -> dict:
     _CHECK_MODELS = [
         "claude-sonnet-4-6",
         "claude-haiku-4-5",
-        "claude-3-5-sonnet-20241022",
-        "claude-3-haiku-20240307",
+        "claude-sonnet-4-5",
+        # Note: claude-3-haiku-20240307 is retired April 19 2026 — do not use
     ]
     for _model in _CHECK_MODELS:
         try:

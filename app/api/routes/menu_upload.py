@@ -70,8 +70,8 @@ async def _image_to_text_claude(data: bytes, media_type: str = "image/jpeg") -> 
     _MODELS = [
         "claude-sonnet-4-6",           # latest + best vision quality
         "claude-haiku-4-5",            # fast, capable fallback
-        "claude-3-5-sonnet-20241022",  # older sonnet
-        "claude-3-haiku-20240307",     # last-resort fallback
+        "claude-sonnet-4-5",           # previous sonnet generation
+        # Note: claude-3-haiku-20240307 is retired April 19 2026 — do not use
     ]
 
     content = [
