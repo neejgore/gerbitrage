@@ -36,17 +36,14 @@ def _pdf_to_text(data: bytes) -> str:
 
 
 _CLAUDE_PROMPT = """\
-You are a scanner. Transcribe every line of text visible in this image exactly as it is printed.
+Transcribe every line of text in this wine menu image exactly as it is printed, line by line.
 
-- Copy each word, number, and symbol character by character.
-- Preserve line breaks — each printed line becomes one output line.
-- Do NOT skip, reorder, summarize, or interpret any text.
-- Do NOT use outside knowledge — only copy what you can see.
-- Include everything: wine names, prices, vintages, section headers, regions, notes.
-- If a character is unclear, write your best literal reading of it.
-- MULTI-COLUMN MENUS: if the page has two or more columns of wines side by side,
-  transcribe the LEFT column top-to-bottom first, then the RIGHT column top-to-bottom.
-  Do not interleave the columns row by row.
+Rules:
+- Copy each character exactly — do not correct spelling, do not substitute wine names you recognise, do not paraphrase.
+- One printed line = one output line. Preserve line breaks.
+- Include everything: wine names, grape varieties, producers, prices, vintages, regions, section headers, notes.
+- If two columns of text appear side by side, transcribe the LEFT column top-to-bottom first, then the RIGHT column.
+- Output plain text only — no markdown, no bullet points, no commentary.
 """
 
 
@@ -184,34 +181,68 @@ def _parse_claude_output(raw: str) -> list[dict]:
     return entries
 
 
-def _prepare_image_for_claude(data: bytes, ext: str) -> bytes:
+def _prepare_image_for_claude(data: bytes, ext: str) -> tuple[bytes, str]:
     """
-    Convert any image (including HEIC) to a JPEG that Claude can accept.
-    - Converts HEIC/HEIF via pillow-heif
-    - Resizes so the longest edge ≤ 1568px (Claude's recommended max)
-    - Re-encodes as JPEG at quality=85 to stay well under the 5 MB API limit
+    Prepare an image for the Claude API.
+
+    - For HEIC/HEIF: convert to JPEG (Claude doesn't accept HEIC natively).
+    - For JPEG/PNG/WebP: pass through at original quality whenever possible.
+    - Only resize if the base64-encoded payload would exceed Claude's 5 MB limit
+      (~3.75 MB raw).  Use quality=95 to preserve text legibility.
+
+    Returns (image_bytes, media_type).
     """
     from PIL import Image as _PIL
 
-    # Register HEIC support if available
-    if ext in ("heic", "heif"):
+    MAX_BYTES = 3_500_000  # conservative limit below the 5 MB base64 cap
+
+    # HEIC must be converted; everything else can stay in its original format
+    needs_conversion = ext in ("heic", "heif")
+
+    if needs_conversion:
         try:
             from pillow_heif import register_heif_opener
             register_heif_opener()
         except ImportError:
             pass
+        img = _PIL.open(io.BytesIO(data)).convert("RGB")
+        # Only downscale if the output would exceed the size cap
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=95, optimize=True)
+        if buf.tell() > MAX_BYTES:
+            # Shrink until it fits, losing as little quality as possible
+            for max_px in (3000, 2400, 2000, 1600):
+                if max(img.width, img.height) <= max_px:
+                    continue
+                img.thumbnail((max_px, max_px), _PIL.LANCZOS)
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=95, optimize=True)
+                if buf.tell() <= MAX_BYTES:
+                    break
+        return buf.getvalue(), "image/jpeg"
 
+    # Non-HEIC: use original bytes if they fit, otherwise resize minimally
+    if len(data) <= MAX_BYTES:
+        media_type = {
+            "jpg": "image/jpeg", "jpeg": "image/jpeg",
+            "png": "image/png", "webp": "image/webp",
+        }.get(ext, "image/jpeg")
+        return data, media_type
+
+    # Oversized non-HEIC — shrink just enough to fit
     img = _PIL.open(io.BytesIO(data)).convert("RGB")
-
-    # Claude recommends keeping images ≤ 1568px on the longest edge for speed
-    # and to avoid hitting the ~5 MB base64 payload limit.
-    max_px = 1568
-    if max(img.width, img.height) > max_px:
+    for max_px in (3000, 2400, 2000, 1600):
+        if max(img.width, img.height) <= max_px:
+            continue
         img.thumbnail((max_px, max_px), _PIL.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=95, optimize=True)
+        if buf.tell() <= MAX_BYTES:
+            return buf.getvalue(), "image/jpeg"
 
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=85, optimize=True)
-    return buf.getvalue()
+    img.save(buf, format="JPEG", quality=95, optimize=True)
+    return buf.getvalue(), "image/jpeg"
 
 
 def _image_to_text_tesseract(data: bytes) -> str:
@@ -885,11 +916,10 @@ async def upload_menu(file: UploadFile = File(...)) -> MenuUploadResponse:
         import os
         if os.environ.get("ANTHROPIC_API_KEY"):
             try:
-                _img_data = _prepare_image_for_claude(data, _ext)
-                media_type = "image/jpeg"  # _prepare always outputs JPEG
+                _img_data, media_type = _prepare_image_for_claude(data, _ext)
                 logger.info(
-                    "Sending '%s' to Claude Vision (%.1f KB)",
-                    filename, len(_img_data) / 1024,
+                    "Sending '%s' to Claude Vision (%.1f KB, %s)",
+                    filename, len(_img_data) / 1024, media_type,
                 )
                 claude_raw = await _image_to_text_claude(_img_data, media_type)
                 logger.info("Claude transcription for '%s':\n%s", filename, claude_raw[:1500])
@@ -1051,8 +1081,8 @@ async def menu_from_url(req: UrlMenuRequest) -> MenuUploadResponse:
         _mime2 = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
                   "webp": "image/webp"}.get(_ext2, "image/jpeg")
         try:
-            _img_bytes = _prepare_image_for_claude(data, _ext2)
-            claude_raw = await _image_to_text_claude(_img_bytes, "image/jpeg")
+            _img_bytes, _mime2 = _prepare_image_for_claude(data, _ext2)
+            claude_raw = await _image_to_text_claude(_img_bytes, _mime2)
             wines = _parse_wines(claude_raw)
             if wines:
                 return await _run_batch_from_entries(wines, source_name)
