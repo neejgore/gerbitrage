@@ -850,7 +850,7 @@ function closeDetail(){
 function exploreInSearch(name,vintage){
   closeDetail();
   // Switch to search tab and pre-fill
-  document.querySelectorAll('.tab-btn')[0].click();
+  switchTab('search');
   _pickedWineId=null;  // clear any stale pinned wine from previous search
   const inp=document.getElementById('searchInput');
   inp.value=name;
