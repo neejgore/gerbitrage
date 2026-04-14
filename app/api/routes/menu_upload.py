@@ -345,7 +345,7 @@ _SPIRITS_RE = re.compile(
 _SCORE_RE = re.compile(
     r"\b(?:RP|WS|JS|VM|AG|JD|NT|TP|ST|JR|BH)\s*\d{2,3}\b"  # critic initials + score
     r"|\b\d{2,3}\s*(?:pts?|points?)\b"                         # "92 pts", "92 points"
-    r"|\b\d{2,3}\s*/\s*100\b",                                 # "92/100"
+    r"|\b(?:8\d|9\d)\s*/\s*100\b",                             # scores 80-99/100 (avoids stripping e.g. "16/100" bottle price)
     re.I,
 )
 
@@ -651,10 +651,10 @@ def _parse_wines(text: str) -> list[dict]:
             desc = _strip_vt_inline(desc_raw)
         else:
             desc = desc_raw
-            # Vintage lookahead: next line has vintage but no real price
+            # Vintage lookahead: next line has vintage but no real price of any kind
             if i + 1 < len(lines):
                 nxt = lines[i + 1]
-                if not _non_year_prices(nxt) and not _DUAL_PRICE_RE.search(nxt):
+                if not _has_real_price(nxt):
                     vt = _vt_from(nxt)
         _add(desc, vt, price, i, is_glass=is_gl, is_half_bottle=is_hb, is_magnum=is_mg)
 
