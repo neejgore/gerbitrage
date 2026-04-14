@@ -36,17 +36,21 @@ def _pdf_to_text(data: bytes) -> str:
 
 
 _CLAUDE_PROMPT = """\
-Extract wine entries from this wine list image. Output one line per wine in this format:
+Extract wine entries from this wine list image. Output one line per wine:
 NAME | VINTAGE | PRICE
 
-Strict rules:
-- NAME: copy the text EXACTLY as it appears in the image, letter by letter. Do not autocomplete, correct, or use wine knowledge to fill in any part of a name.
-- If you cannot clearly read a word in the name, omit that wine entirely — do not guess.
-- VINTAGE: 4-digit year as printed, or NV if shown, or NONE if absent.
-- PRICE: numeric digits only (no $ or commas). Only include wines with a clearly visible price number.
-- Skip spirits, cocktails, beer, food.
-- Output ONLY the data lines. No headers, notes, or explanation.
-- If the image contains no readable wine list with prices, output: NO_WINES
+Rules for each field:
+- NAME: copy the wine name EXACTLY as printed. Do not add, correct, or complete any word you cannot clearly see.
+- VINTAGE: the 4-digit year shown anywhere near the wine (same line or next line). Use NV if printed, NONE if absent.
+- PRICE: a single number (no $ or commas). If two prices are shown (e.g. 16/28 for small/large pour), use the LARGER number. If a range like $45-55, use the higher number.
+
+Additional rules:
+- Vintage and region often appear on the line BELOW the wine name — still associate them with that wine.
+- Skip section headers (e.g. "RED", "WHITE", "BY THE GLASS"), spirits, beer, food.
+- Only include a wine if you can see a price number. If you cannot read a word in the name, omit that wine rather than guessing.
+- Do NOT use wine knowledge to complete or correct names — copy only what is visible.
+- Output ONLY data lines. No headers, notes, or explanation.
+- If there is no readable wine list with prices, output: NO_WINES
 """
 
 
@@ -106,10 +110,19 @@ def _parse_claude_output(raw: str) -> list[dict]:
         desc, vintage_raw, price_raw = parts[0], parts[1], parts[2]
         if not desc or len(desc) < 3:
             continue
-        try:
-            price = float(price_raw.replace(",", "").replace("$", ""))
-        except ValueError:
-            continue
+        # Handle dual prices like "16/28" or "45/88" — take the larger
+        price_raw = price_raw.replace(",", "").replace("$", "").strip()
+        if "/" in price_raw:
+            price_parts = price_raw.split("/")
+            try:
+                price = max(float(p.strip()) for p in price_parts if p.strip())
+            except ValueError:
+                continue
+        else:
+            try:
+                price = float(price_raw)
+            except ValueError:
+                continue
         if not (8 <= price <= 50_000):
             continue
         vintage_raw = vintage_raw.upper().strip()
