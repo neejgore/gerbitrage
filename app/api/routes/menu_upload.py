@@ -68,9 +68,10 @@ async def _image_to_text_claude(data: bytes, media_type: str = "image/jpeg") -> 
     client = anthropic.AsyncAnthropic(api_key=api_key)
 
     _MODELS = [
-        "claude-3-5-sonnet-20241022",  # best vision quality
-        "claude-3-sonnet-20240229",    # older sonnet — still much better than haiku
-        "claude-3-haiku-20240307",     # always available fallback
+        "claude-sonnet-4-6",           # latest + best vision quality
+        "claude-haiku-4-5",            # fast, capable fallback
+        "claude-3-5-sonnet-20241022",  # older sonnet
+        "claude-3-haiku-20240307",     # last-resort fallback
     ]
 
     content = [

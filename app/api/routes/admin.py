@@ -197,8 +197,9 @@ async def vision_check() -> dict:
 
     # 3. Make a minimal API call — try models in descending quality order
     _CHECK_MODELS = [
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5",
         "claude-3-5-sonnet-20241022",
-        "claude-3-sonnet-20240229",
         "claude-3-haiku-20240307",
     ]
     for _model in _CHECK_MODELS:
