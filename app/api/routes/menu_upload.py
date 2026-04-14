@@ -36,19 +36,14 @@ def _pdf_to_text(data: bytes) -> str:
 
 
 _CLAUDE_PROMPT = """\
-You are reading a wine menu. List every wine entry you can see.
+Please transcribe all the text visible in this wine menu image, line by line, exactly as it appears.
 
-For each wine output exactly ONE line in this format:
-  WINE NAME | VINTAGE | PRICE
-
-Rules:
-- WINE NAME: copy the name exactly as printed (include grape variety and producer as shown)
-- VINTAGE: the year (e.g. 2019), or NV if none shown
-- PRICE: copy the price exactly as printed — e.g. 20/38 for glass/bottle, 45/88, 59, etc.
-- If price is cut off or not visible, write MP
-- Skip non-wine lines: section headers (Rosé, Red, White…), column headers, region/country lines
-- For flights (e.g. "Japan Flight $59"), include as one entry with the flight name and price
-- Output nothing else — no markdown, no bullets, no commentary, no blank lines
+- Output the raw text only — one printed line per output line.
+- Copy every word and number exactly as printed. Do not correct, rephrase, or add anything.
+- Include everything: wine names, prices, vintages, regions, section headers, notes.
+- Do not use outside knowledge — only copy what you can literally see in the image.
+- If two columns appear side by side, transcribe the left column first, then the right.
+- No markdown, no bullet points, no commentary.
 """
 
 
@@ -927,8 +922,8 @@ async def upload_menu(file: UploadFile = File(...)) -> MenuUploadResponse:
                     filename, len(_img_data) / 1024, media_type,
                 )
                 claude_raw = await _image_to_text_claude(_img_data, media_type)
-                logger.info("Claude output for '%s':\n%s", filename, claude_raw[:1500])
-                wines = _parse_claude_output(claude_raw)
+                logger.info("Claude transcription for '%s':\n%s", filename, claude_raw[:1500])
+                wines = _parse_wines(claude_raw)
                 logger.info("Parsed %d wine entries from Claude transcription of '%s'", len(wines), filename)
                 if not wines:
                     raise HTTPException(
@@ -1087,7 +1082,7 @@ async def menu_from_url(req: UrlMenuRequest) -> MenuUploadResponse:
         try:
             _img_bytes, _mime2 = _prepare_image_for_claude(data, _ext2)
             claude_raw = await _image_to_text_claude(_img_bytes, _mime2)
-            wines = _parse_claude_output(claude_raw)
+            wines = _parse_wines(claude_raw)
             if wines:
                 return await _run_batch_from_entries(wines, source_name)
         except Exception as exc:
