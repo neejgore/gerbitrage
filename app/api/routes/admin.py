@@ -158,8 +158,8 @@ async def vision_debug(file: UploadFile = File(...)) -> dict:
         return {"error": "ANTHROPIC_API_KEY not set"}
 
     try:
-        img_data = _prepare_image_for_claude(data, ext)
-        raw = await _image_to_text_claude(img_data, "image/jpeg")
+        img_data, media_type = _prepare_image_for_claude(data, ext)
+        raw = await _image_to_text_claude(img_data, media_type)
         parsed = _parse_wines(raw)
         return {
             "claude_raw_output": raw,

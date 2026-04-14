@@ -367,13 +367,24 @@ _VINTAGE_RE = re.compile(r"\b((?:19|20)\d{2}|N\.?V\.?|M\.?V\.?)\b", re.I)
 _PRICE_RE = re.compile(r"(?<!\d)\$?(\d{2,5}(?:\.\d{1,2})?)(?!\d)")
 
 _SKIP_RE = re.compile(
-    r"^(\d+$|BY THE GLASS|HALF BOTTLES?|MAGNUM|SPARKLING$|ROSE$|ROSÉ$|WHITE$|RED$|BEER"
+    r"^(\d+$|WINE\s+BY\s+THE\s+GLASS|BY THE GLASS|HALF BOTTLES?|MAGNUM|SPARKLING$|ROSE$|ROSÉ$|WHITE$|RED$|BEER"
     r"|COCKTAIL|MOCKTAIL|SPIRIT|VODKA|GIN|TEQUILA|MEZCAL|RUM|BOURBON"
     r"|WHISKEY|SCOTCH|COGNAC|CHARDONNAY|PINOT NOIR|CABERNET|ZINFANDEL"
     r"|FRANCE$|SPAIN$|ITALY$|GERMANY$|AUSTRIA$|CHAMPAGNE$|BURGUNDY$"
     r"|BORDEAUX$|DESSERT$|FORTIFIED$|MERLOT$|SYRAH$|SAUVIGNON BLANC$"
     r"|GLASS\s*[/|]\s*BOTTLE|BOTTLE\s*[/|]\s*GLASS|PER\s+GLASS|PER\s+BOTTLE"
     r"|PAGE\s*\d|TABLE\s*OF\s*CONTENTS|WINE\s*LIST|^\d{1,3}$)",
+    re.I,
+)
+
+# Region/appellation lines: "irpinia, italy 2019", "napa, california 2022" etc.
+# These appear BELOW the wine name line and must not be used as wine names.
+_REGION_LINE_RE = re.compile(
+    r"^[\w\s\'\-\.]+,\s*"  # place name + comma
+    r"(?:california|italy|france|spain|germany|austria|portugal|argentina|chile|"
+    r"australia|new\s+zealand|oregon|washington|new\s+york|greece|hungary|"
+    r"napa|sonoma|burgundy|bordeaux|champagne|rhone|loire|alsace|tuscany|piedmont|"
+    r"ca|ny|or|wa)\b",
     re.I,
 )
 _SPIRITS_KW = (
@@ -607,6 +618,9 @@ def _parse_wines(text: str) -> list[dict]:
                 or _MAGNUM_SECTION_RE.search(desc)
                 or _BOTTLE_SECTION_RE.search(desc)):
             return False
+        # Reject region/appellation lines like "irpinia, italy" or "napa, california"
+        if _REGION_LINE_RE.match(desc):
+            return False
         # Reject ALL-CAPS section headers like "FRANCE – BURGUNDY" or "RHÔNE VALLEY"
         # Real wine names are always mixed-case (e.g. "Château Pétrus", not "CHÂTEAU PÉTRUS")
         desc_alpha = re.sub(r"[^a-zA-Z]", "", desc)
@@ -793,6 +807,12 @@ def _parse_wines(text: str) -> list[dict]:
             continue
         if (_GLASS_SECTION_RE.search(name_line) or _HALF_BOTTLE_SECTION_RE.search(name_line)
                 or _MAGNUM_SECTION_RE.search(name_line) or _BOTTLE_SECTION_RE.search(name_line)):
+            continue
+        if _REGION_LINE_RE.match(name_line):
+            continue
+        # If next_line was already consumed by Pass 1 as a wine entry, don't use it
+        # as a price source — it means this line is a region/continuation line, not a name
+        if (i + 1) in used:
             continue
 
         # Triple price on next line
