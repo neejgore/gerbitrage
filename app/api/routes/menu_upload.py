@@ -36,25 +36,14 @@ def _pdf_to_text(data: bytes) -> str:
 
 
 _CLAUDE_PROMPT = """\
-Extract wine entries from this wine list image. Output one line per wine:
-NAME | VINTAGE | PRICE | TYPE
+You are a scanner. Transcribe every line of text visible in this image exactly as it is printed.
 
-Rules for each field:
-- NAME: copy the wine name EXACTLY as printed. Do not add, correct, or complete any word you cannot clearly see.
-- VINTAGE: the 4-digit year shown anywhere near the wine (same line or next line). Use NV if printed, NONE if absent.
-- PRICE: a single number (no $ or commas).
-  • If a BOTTLE price is shown, use it as-is.
-  • If TWO pour prices are shown (e.g. 16/28 meaning 5oz/9oz by the glass), use the SMALLER number (the 5oz pour price).
-  • If a range like $45-55, use the lower number.
-- TYPE: write GLASS if this wine is listed in a "by the glass" section or the price is a per-glass price. Write BOTTLE otherwise.
-
-Additional rules:
-- Vintage and region often appear on the line BELOW the wine name — still associate them with that wine.
-- Skip section headers (e.g. "RED", "WHITE", "BY THE GLASS"), spirits, beer, sake, food.
-- Only include a wine if you can see a price. If you cannot read a word in the name, omit that wine rather than guessing.
-- Do NOT use wine knowledge to complete or correct names — copy only what is visible.
-- Output ONLY data lines. No headers, notes, or explanation.
-- If there is no readable wine list with prices, output: NO_WINES
+- Copy each word, number, and symbol character by character.
+- Preserve line breaks — each printed line becomes one output line.
+- Do NOT skip, reorder, summarize, or interpret any text.
+- Do NOT use outside knowledge — only copy what you can see.
+- Include everything: wine names, prices, vintages, section headers, regions, notes.
+- If a character is unclear, write your best literal reading of it.
 """
 
 
@@ -377,25 +366,36 @@ def _looks_like_wine_name(desc: str) -> bool:
     return True
 
 
+# Detects "by the glass" section headers
+_GLASS_SECTION_RE = re.compile(
+    r"\b(by\s+the\s+glass|glass\s+pour|wine\s+by\s+glass|btg)\b", re.I
+)
+# Detects X/Y dual-price format (e.g. 16/28, 45/88)
+_DUAL_PRICE_RE = re.compile(r"(\d{1,4})/(\d{1,4})")
+_POURS_PER_BOTTLE = 5  # 5oz pour × 5 = 750ml bottle equivalent
+
+
 def _parse_wines(text: str) -> list[dict]:
     """
     Extract (desc, vintage, menu_price) triples from raw OCR / PDF text.
 
-    Handles the many formats found on restaurant wine lists:
-      • "Name 2019 145"          – classic year+price on one line
-      • "Name ........... 145"   – price without year (dots as leaders)
-      • "Name $145"              – explicit $ sign, no year
-      • "Name 2019"  / "145"     – name+year on one line, price on next
-      • "Name"  / "2019  145"    – name alone, year+price on next line
+    Handles:
+      • "Name 2019 145"           – classic year+price on one line
+      • "Name ........... 145"    – price without year (dot leaders)
+      • "Name $145"               – explicit $ sign
+      • "Name 16/28"              – by-the-glass dual price (takes 5oz, ×5)
+      • "Name 2019" / "145"       – year on one line, price on next
+      • "Name"  / "2019  145"     – name alone, year+price on next line
     """
     lines = [_clean_line(l) for l in text.splitlines() if _clean_line(l)]
     entries: list[dict] = []
     seen: set[tuple] = set()
-    used: set[int] = set()  # line indices consumed as part of a multi-line match
+    used: set[int] = set()
+    in_glass_section = False  # tracks "WINE BY THE GLASS" sections
 
-    def _add(desc: str, vintage_str: str | None, price: float, idx: int) -> None:
+    def _add(desc: str, vintage_str: str | None, price: float, idx: int,
+             is_glass: bool = False) -> None:
         desc = re.sub(r"\s*[|\-–—,;:]+\s*$", "", desc).strip()
-        # Strip trailing year tokens that ended up in the desc
         desc = re.sub(r"\s+((?:19|20)\d{2}|NV|MV)\s*$", "", desc, flags=re.I).strip()
         if not _looks_like_wine_name(desc):
             return
@@ -403,19 +403,53 @@ def _parse_wines(text: str) -> list[dict]:
             return
         if any(kw in desc.lower() for kw in _SPIRITS_KW):
             return
-        if not _is_wine_price(price):
+        # Scale glass price to bottle-equivalent for fair markup comparison
+        menu_price = round(price * _POURS_PER_BOTTLE, 2) if is_glass else price
+        if not _is_wine_price(menu_price):
             return
         vintage = int(vintage_str) if vintage_str and vintage_str.isdigit() else None
-        key = (desc.lower()[:45], vintage, int(price))
+        display = f"{desc} (by glass)" if is_glass else desc
+        key = (desc.lower()[:45], vintage, int(menu_price))
         if key in seen:
             return
         seen.add(key)
         used.add(idx)
-        entries.append({"desc": desc, "vintage": vintage, "menu_price": price})
+        entries.append({
+            "desc": display,
+            "vintage": vintage,
+            "menu_price": menu_price,
+            "glass_price": price if is_glass else None,
+        })
 
     # ── Pass 1: everything on one line ─────────────────────────────────────
     for i, line in enumerate(lines):
-        # Find all price-shaped numbers (exclude 4-digit years)
+        # Update glass-section flag from headers
+        if _GLASS_SECTION_RE.search(line):
+            in_glass_section = True
+        # Reset on "bottle" section cues
+        if re.search(r"\bby\s+the\s+bottle\b|\bbottle\s+list\b", line, re.I):
+            in_glass_section = False
+
+        # Check for dual-price format (X/Y) — always indicates glass pricing
+        dual = _DUAL_PRICE_RE.search(line)
+        if dual:
+            lo, hi = float(dual.group(1)), float(dual.group(2))
+            glass_price = lo  # smaller = 5oz pour
+            # Name is everything before the dual-price token
+            desc_raw = line[:dual.start()].strip()
+            vm = list(_VINTAGE_RE.finditer(desc_raw))
+            if vm:
+                vt = vm[-1]
+                desc = (desc_raw[:vt.start()] + desc_raw[vt.end():]).strip()
+                vintage_str: str | None = vt.group(1)
+            else:
+                desc = desc_raw
+                vintage_str = None
+            if _is_wine_price(glass_price):
+                _add(desc, vintage_str, glass_price, i, is_glass=True)
+            continue
+
+        # Standard single-price line
         price_tokens = [
             (m.start(), m.group(1))
             for m in _PRICE_RE.finditer(line)
@@ -425,22 +459,20 @@ def _parse_wines(text: str) -> list[dict]:
         if not price_tokens:
             continue
 
-        # Use the last price token as the menu price (typically right-aligned)
         price_pos, price_str = price_tokens[-1]
         price = float(price_str.replace(",", ""))
         desc_raw = line[:price_pos].strip()
 
-        # Find vintage in the desc portion
         vm = list(_VINTAGE_RE.finditer(desc_raw))
         if vm:
             vt = vm[-1]
             desc = (desc_raw[:vt.start()] + desc_raw[vt.end():]).strip()
-            vintage_str: str | None = vt.group(1)
+            vintage_str = vt.group(1)
         else:
             desc = desc_raw
             vintage_str = None
 
-        _add(desc, vintage_str, price, i)
+        _add(desc, vintage_str, price, i, is_glass=in_glass_section)
 
     # ── Pass 2: name on one line, price (+optional year) on the next ───────
     for i in range(len(lines) - 1):
@@ -449,15 +481,23 @@ def _parse_wines(text: str) -> list[dict]:
         name_line = lines[i]
         next_line = lines[i + 1]
 
-        # Name line should look like a wine name: no price, not too short
-        if _PRICE_RE.search(name_line):
+        if _PRICE_RE.search(name_line) or _DUAL_PRICE_RE.search(name_line):
             continue
         if len(name_line) < 5 or _SKIP_RE.match(name_line):
             continue
         if any(kw in name_line.lower() for kw in _SPIRITS_KW):
             continue
 
-        # Next line should have a price
+        # Check for dual price on next line
+        dual = _DUAL_PRICE_RE.search(next_line)
+        if dual:
+            glass_price = float(dual.group(1))
+            vm = list(_VINTAGE_RE.finditer(next_line[:dual.start()]))
+            vintage_str = vm[-1].group(1) if vm else None
+            if _is_wine_price(glass_price):
+                _add(name_line, vintage_str, glass_price, i, is_glass=True)
+            continue
+
         price_tokens = [
             (m.start(), m.group(1))
             for m in _PRICE_RE.finditer(next_line)
@@ -470,11 +510,10 @@ def _parse_wines(text: str) -> list[dict]:
         price_pos, price_str = price_tokens[-1]
         price = float(price_str.replace(",", ""))
         rest = next_line[:price_pos].strip()
-
         vm = list(_VINTAGE_RE.finditer(rest or next_line))
         vintage_str = vm[-1].group(1) if vm else None
 
-        _add(name_line, vintage_str, price, i)
+        _add(name_line, vintage_str, price, i, is_glass=in_glass_section)
 
     return entries
 
@@ -571,14 +610,10 @@ async def upload_menu(file: UploadFile = File(...)) -> MenuUploadResponse:
                     filename, len(_img_data) / 1024,
                 )
                 claude_raw = await _image_to_text_claude(_img_data, media_type)
-                logger.info("Claude output for '%s':\n%s", filename, claude_raw[:1200])
-                if "NO_WINES" in claude_raw.strip():
-                    raise HTTPException(
-                        status_code=422,
-                        detail="No wine list with prices detected. Make sure the photo shows wine names and prices clearly.",
-                    )
-                wines = _parse_claude_output(claude_raw)
-                logger.info("Parsed %d wine entries from Claude for '%s'", len(wines), filename)
+                logger.info("Claude transcription for '%s':\n%s", filename, claude_raw[:1500])
+                # Parse the literal transcription — Claude never interprets, just copies
+                wines = _parse_wines(claude_raw)
+                logger.info("Parsed %d wine entries from Claude transcription of '%s'", len(wines), filename)
                 if not wines:
                     raise HTTPException(
                         status_code=422,
