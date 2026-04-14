@@ -1244,8 +1244,63 @@ async def _run_batch(text: str, source_name: str) -> MenuUploadResponse:
     return await _batch_analyze(wines, source_name)
 
 
+async def _prefetch_vivino(wines: list[dict]) -> None:
+    """
+    Run Vivino lookups for all wines concurrently before returning results.
+    Results are written to Redis cache so the subsequent _run_analysis calls
+    find them as cache hits rather than triggering fire-and-forget tasks.
+
+    Capped at 45 seconds total — whatever finishes in time is used.
+    """
+    import unicodedata as _ud
+    from app.services.text_parser import parse_wine_text as _pwt
+    from app.services.vivino_dynamic import dynamic_lookup as _vivino_lookup
+
+    vivino_sem = asyncio.Semaphore(4)  # 4 concurrent Playwright browsers
+
+    def _slugify(s: str) -> str:
+        nfkd = _ud.normalize("NFD", s.lower())
+        s2 = "".join(c for c in nfkd if _ud.category(c) != "Mn")
+        s2 = re.sub(r"[^a-z0-9]+", "-", s2).strip("-")
+        return s2[:60]
+
+    async def _one(w: dict) -> None:
+        async with vivino_sem:
+            parsed = _pwt(w["desc"])
+            wine_name = parsed.wine_name or w["desc"]
+            producer = parsed.producer or ""
+            wine_id = _slugify(f"{producer}-{wine_name}" if producer else wine_name)
+            try:
+                await asyncio.wait_for(
+                    _vivino_lookup(
+                        wine_id=wine_id,
+                        wine_name=wine_name,
+                        producer=producer,
+                        vintage=w.get("vintage"),
+                    ),
+                    timeout=30,
+                )
+            except Exception:
+                pass  # timeout or scrape failure — just skip
+
+    tasks = [asyncio.create_task(_one(w)) for w in wines]
+    try:
+        await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=45)
+    except asyncio.TimeoutError:
+        for t in tasks:
+            t.cancel()
+    logger.info("Vivino prefetch complete for %d wines", len(wines))
+
+
 async def _batch_analyze(wines: list[dict], source_name: str) -> MenuUploadResponse:
     """Run parallel analysis on a list of pre-validated wine dicts."""
+    # Pre-fetch Vivino prices for all wines concurrently so the first run
+    # returns real pricing rather than requiring a second request.
+    try:
+        await _prefetch_vivino(wines)
+    except Exception as exc:
+        logger.warning("Vivino prefetch failed: %s", exc)
+
     sem = asyncio.Semaphore(10)
 
     async def _analyze(w: dict) -> MenuWineResult:

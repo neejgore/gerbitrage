@@ -66,6 +66,74 @@ _STOP_WORDS = frozenset(
     ]
 )
 
+# Generic / geographic words that are NOT meaningful producer identifiers.
+# A producer whose significant tokens consist ONLY of these words (e.g.
+# "Napa Cellars") cannot be used as a producer-identity gate because the
+# same words appear legitimately in many catalog entries as region names.
+_PRODUCER_GENERIC = frozenset([
+    # Generic winery-type words
+    "wine", "winery", "wines", "cellars", "vineyard", "vineyards",
+    "estate", "estates", "chateau", "domaine", "cave", "caves",
+    "maison", "bodega", "bodegas", "cantina", "cantine", "tenuta",
+    "weingut", "family", "farm", "gardens",
+    # Pure geographic region names
+    "napa", "sonoma", "burgundy", "bordeaux", "champagne",
+    "valley", "coast", "county", "district", "region",
+    # Grape varietals — not producer identifiers
+    "cabernet", "sauvignon", "chardonnay", "pinot", "noir", "grigio",
+    "gris", "blanc", "merlot", "syrah", "shiraz", "grenache", "malbec",
+    "zinfandel", "riesling", "viognier", "tempranillo", "sangiovese",
+    "nebbiolo", "barbera", "aglianico", "mourvedre", "semillon",
+    "marsanne", "roussanne", "vermentino", "fiano", "greco", "primitivo",
+    "montepulciano", "corvina", "amarone", "brunello", "barolo",
+    "barbaresco", "chianti", "prosecco", "cava", "cremant",
+    # Sparkling / wine-style words
+    "brut", "rose", "blanc", "rouge", "rouge", "blanc", "nature",
+    "reserve", "select", "special", "classic", "old", "vine", "vines",
+    "block", "single", "cuvee", "vintage", "magnum", "blend",
+])
+
+import re as _re
+
+def _producer_id_tokens(producer: str) -> set[str]:
+    """
+    Return the tokens in a producer name that are actually identifying
+    (i.e. not generic winery words or geographic placeholders).
+    """
+    tokens = set(_re.sub(r"[^a-z0-9\s]", "", producer.lower()).split())
+    return {t for t in tokens if t not in _PRODUCER_GENERIC and len(t) >= 3}
+
+
+def _producer_gate(query_producer: str, entry: "_CatalogEntry") -> bool:
+    """
+    Hard gate: returns False (reject) if the query has identifying producer
+    tokens that do NOT appear anywhere in the catalog entry's producer OR
+    wine name.  This prevents "Napa Cellars" → "Cakebread Cellars",
+    "Joseph Cellars" → "Josh Cellars", etc.
+
+    Returns True (pass) when:
+    - the query producer has no identifying tokens (pure generic/geo), OR
+    - at least one identifying token appears in the catalog entry text.
+    """
+    id_tokens = _producer_id_tokens(query_producer)
+    if not id_tokens:
+        # The producer name consists entirely of generic/geographic words
+        # (e.g. "Napa Cellars", "Valley Wines") — no unique identifier to
+        # verify against.  Block the match: we cannot confirm it is correct.
+        return False
+
+    # Build the searchable text from the catalog entry
+    entry_text = _re.sub(
+        r"[^a-z0-9\s]", "",
+        (entry.normalized_producer + " " + entry.normalized_name).lower()
+    )
+    entry_words = set(entry_text.split())
+
+    # At least ONE identifying token must appear in the catalog entry.
+    # (We don't require all of them — a cuvée name like "Mirabelle" may not
+    # be in the catalog even though "Schramsberg" is.)
+    return bool(id_tokens & entry_words)
+
 
 def _significant_tokens(text: str) -> set[str]:
     return {
@@ -310,9 +378,15 @@ def identify_wine(
     # Always require at least one overlapping significant token. Wine names
     # are proper nouns — if the query word isn't in the candidate's tokens
     # at all, it cannot be the right wine.
+    query_producer = parsed.producer or ""
     candidates: list[tuple[float, dict, _CatalogEntry]] = []
     for entry in _INDEX:
         if query_tokens and _token_overlap(query_tokens, entry.tokens) == 0:
+            continue
+        # Producer gate: if the query has identifying producer tokens, they
+        # MUST appear in the catalog entry. Prevents "Joseph Cellars" →
+        # "Josh Cellars", "Napa Cellars" → "Cakebread Cellars", etc.
+        if query_producer and not _producer_gate(query_producer, entry):
             continue
         score, breakdown = _score_candidate(parsed, entry)
         if score >= LOW_THRESHOLD:
