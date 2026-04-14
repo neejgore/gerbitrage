@@ -326,7 +326,7 @@ _SKIP_RE = re.compile(
     r"|WHISKEY|SCOTCH|COGNAC|CHARDONNAY|PINOT NOIR|CABERNET|ZINFANDEL"
     r"|FRANCE$|SPAIN$|ITALY$|GERMANY$|AUSTRIA$|CHAMPAGNE$|BURGUNDY$"
     r"|BORDEAUX$|DESSERT$|FORTIFIED$|MERLOT$|SYRAH$|SAUVIGNON BLANC$"
-    r"|GLASS\s*[/|]\s*BOTTLE|BOTTLE\s*[/|]\s*GLASS"  # column headers
+    r"|GLASS\s*[/|]\s*BOTTLE|BOTTLE\s*[/|]\s*GLASS|PER\s+GLASS|PER\s+BOTTLE"
     r"|PAGE\s*\d|TABLE\s*OF\s*CONTENTS|WINE\s*LIST|^\d{1,3}$)",
     re.I,
 )
@@ -374,6 +374,10 @@ _AQ_RE = re.compile(r"\bAQ\b\s*$", re.I)
 # Bin number prefix: "42." or "42)" at start of line — 1-3 digits only to avoid stripping years
 _BIN_RE = re.compile(r"^\d{1,3}[\.\)]\s+")
 
+# European thousands separator: "3.100" = 3,100 — 1-3 digits, dot, exactly 3 digits
+# Must NOT be followed by another digit (excludes "3.1000" or decimal "78.00")
+_EURO_THOUSANDS_RE = re.compile(r"(?<!\d)(\d{1,3})\.(\d{3})(?!\d)")
+
 _POURS_PER_BOTTLE = 5  # 5oz pour × 5 = 750ml bottle equivalent
 
 # Vintage normalization pattern for stripping from desc strings
@@ -386,6 +390,9 @@ def _clean_line(raw: str) -> str:
     # Pipe-separated table rows: "Name | 2019 | 145" → "Name 2019 145"
     if "|" in raw:
         raw = " ".join(p.strip() for p in raw.split("|") if p.strip())
+    # European thousands separator: "3.100" → "3100", "1.250" → "1250"
+    # (only when 3 digits after dot; "78.00" has 2 digits so is untouched)
+    raw = _EURO_THOUSANDS_RE.sub(lambda m: m.group(1) + m.group(2), raw)
     line = _FILL_RE.sub(" ", raw)
     line = re.sub(r"\s{2,}", " ", line).strip()
     line = _LEAD_DECOR_RE.sub("", line).strip()    # strip leading bullets/dashes
@@ -429,7 +436,7 @@ def _looks_like_wine_name(desc: str) -> bool:
 
 # Detects "by the glass" section headers, including spaced-out text and pour-size labels
 _GLASS_SECTION_RE = re.compile(
-    r"\b(by\s+the\s+glass|glass\s+pour|wine\s+by\s+glass|btg)\b"
+    r"\b(by\s+the\s+glass|glass\s+pour|wine\s+by\s+glass|btg|per\s+glass|per\s+the\s+glass)\b"
     r"|b\s*y\s+t\s*h\s*e\s+g\s*l\s*a\s*s\s*s"  # spaced-out: "B Y T H E G L A S S"
     r"|\b\d+\s*(?:oz|ounce)s?\b",               # pour-size labels: "5 Ounces", "6 oz"
     re.I,
@@ -542,6 +549,11 @@ def _parse_wines(text: str) -> list[dict]:
             return False
         if _SKIP_RE.match(desc):
             return False
+        # Reject ALL-CAPS section headers like "FRANCE – BURGUNDY" or "RHÔNE VALLEY"
+        # Real wine names are always mixed-case (e.g. "Château Pétrus", not "CHÂTEAU PÉTRUS")
+        desc_alpha = re.sub(r"[^a-zA-Z]", "", desc)
+        if desc_alpha and desc_alpha == desc_alpha.upper() and re.search(r"[-–—]", desc):
+            return False
         if any(kw in desc.lower() for kw in _SPIRITS_KW):
             return False
         if is_half_bottle:
@@ -600,10 +612,27 @@ def _parse_wines(text: str) -> list[dict]:
                 _add(desc, vt, lo, i, is_glass=True)
             continue
 
-        # Standard single price
+        # Standard single price (or two-column glass/bottle)
         pt = _non_year_prices(line)
         if not pt:
             continue
+
+        # Two-column glass/bottle: "Name 11 42" (space-adjacent, reasonable ratio)
+        # e.g. menus with "PER GLASS  PER BOTTLE" column headers
+        if len(pt) >= 2:
+            g_pos, g_str = pt[-2]
+            b_pos, b_str = pt[-1]
+            g_price = float(g_str.replace(",", ""))
+            b_price = float(b_str.replace(",", ""))
+            chars_between = b_pos - g_pos - len(g_str)
+            if chars_between <= 6 and 2.0 <= b_price / g_price <= 8.0:
+                desc_raw = line[:g_pos].strip()
+                vt = _vt_from(desc_raw)
+                desc = _strip_vt_inline(desc_raw) if vt else desc_raw
+                _add(desc, vt, g_price, i, is_glass=True)
+                _add(desc, vt, b_price, i, is_glass=False, is_half_bottle=is_hb, is_magnum=is_mg)
+                continue
+
         price_pos, price_str = pt[-1]
         price = float(price_str.replace(",", ""))
         desc_raw = line[:price_pos].strip()
