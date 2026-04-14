@@ -57,11 +57,13 @@ PRODUCER WINE_NAME | VINTAGE | PRICE
 
 Rules:
 - One line per wine, nothing else
-- SKIP any item that is sake, beer, spirits, cocktail, water, juice, tea, coffee, or a flight/package (e.g. "Japan Flight", "3oz of each")
-- SKIP section headers, descriptions, or prices with no wine name
+- SKIP any item that is sake, beer, spirits, cocktail, water, juice, tea, coffee, or a flight/package
+- SKIP section headers, descriptions, restaurant policies, or lines with no wine name
 - If the entry is GRAPE, PRODUCER (e.g. "AGLIANICO, CONTRADE DI TAURAUSI 20/38"), reformat as "CONTRADE DI TAURAUSI AGLIANICO"
+- If the entry is GRAPE - PRODUCER VINTAGE - REGION PRICE (e.g. "Chardonnay- Sequoia Grove 2023 Estate- Napa Valley 75"), reformat as "SEQUOIA GROVE CHARDONNAY ESTATE"
 - Keep the vintage and price EXACTLY as extracted — do NOT add, change, or invent any information
-- If a wine name is unclear or non-standard, copy it exactly as printed — never substitute a different wine name
+- PRICE: use the bottle price. If the wine appears in BOTH a by-the-glass section AND a bottle section, output it ONCE with the price as GLASS/BOTTLE (e.g. 21/75). If only a glass price is given, output as GLASS_PRICE | GLASS (4th column).
+- If a wine name is unclear, copy it exactly as printed — never substitute a different wine name
 - Output nothing else
 
 Wines:
@@ -86,6 +88,42 @@ async def _claude_call(
         if hasattr(block, "text"):
             return block.text
     return ""
+
+
+async def _normalise_text_wines(text: str) -> str:
+    """
+    Single-step Claude pipeline for text-based menus (HTML, PDF, plain text).
+    The text is already extracted — we just need Claude to normalise it into
+    PRODUCER WINE_NAME | VINTAGE | PRICE format.
+    """
+    import os
+    import anthropic
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY not set")
+
+    client = anthropic.AsyncAnthropic(api_key=api_key)
+    _MODELS = ["claude-sonnet-4-6", "claude-haiku-4-5", "claude-sonnet-4-5"]
+
+    last_err: Exception | None = None
+    for model in _MODELS:
+        try:
+            result = await _claude_call(
+                client,
+                system=_NORMALISE_SYSTEM,
+                messages=[{"role": "user", "content": _NORMALISE_PROMPT_TPL.format(wines=text)}],
+                model=model,
+                max_tokens=8192,
+            )
+            logger.info("Text normalise output (%s):\n%s", model, result[:2000])
+            return result
+        except Exception as exc:
+            last_err = exc
+            logger.warning("Model %s failed: %s", model, exc)
+            continue
+
+    raise RuntimeError(f"All Claude models failed: {last_err}")
 
 
 async def _extract_and_normalise_wines(data: bytes, media_type: str) -> str:
@@ -1312,4 +1350,23 @@ async def menu_from_url(req: UrlMenuRequest) -> MenuUploadResponse:
             logger.warning("Claude Vision failed for URL image: %s", exc)
 
     text = _extract_text_from_url_content(data, content_type, url)
+    if not text.strip():
+        raise HTTPException(422, "Could not extract any text from that URL.")
+
+    # Use Claude to normalise the text rather than the fragile regex parser.
+    # The regex parser was designed for lightly-structured OCR output; it breaks
+    # badly on real HTML menus (wrong glass/bottle detection, 401(k) parsed as a
+    # price, etc.).  Claude handles arbitrary formats cleanly.
+    import os as _os2
+    if _os2.environ.get("ANTHROPIC_API_KEY"):
+        try:
+            normalised = await _normalise_text_wines(text)
+            wines = _parse_claude_output(normalised)
+            if wines:
+                logger.info("Claude normalised %d wines from URL text", len(wines))
+                return await _batch_analyze(wines, source_name)
+        except Exception as exc:
+            logger.warning("Claude text normalisation failed, falling back to regex: %s", exc)
+
+    # Fallback: regex parser (less reliable for complex HTML menus)
     return await _run_batch(text, source_name)
