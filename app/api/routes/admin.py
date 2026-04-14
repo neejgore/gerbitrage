@@ -11,7 +11,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, File, UploadFile
 
 from app.data.wine_catalog import WINE_CATALOG, WINE_CATALOG_BY_ID
 from app.services.scheduler import run_price_refresh, scheduler_status
@@ -142,10 +142,9 @@ def get_stats() -> dict:
 
 
 @router.post("/vision-debug", summary="Upload an image and see Claude's raw OCR output")
-async def vision_debug(file: "UploadFile") -> dict:
+async def vision_debug(file: UploadFile = File(...)) -> dict:
     """Upload a menu image and get back Claude's raw structured output before parsing."""
     import os
-    from fastapi import UploadFile as _UF
     from app.api.routes.menu_upload import (
         _prepare_image_for_claude, _image_to_text_claude, _parse_claude_output
     )
