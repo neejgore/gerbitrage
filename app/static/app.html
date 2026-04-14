@@ -887,8 +887,11 @@ function buildTable(results,filter){
     const dn=r.wine_name||r.raw_text;
     const mc=r.markup!=null?(r.markup<0.8?'var(--green)':r.markup<=1.5?'#6ee7b7':r.markup<=2.5?'var(--amber)':'var(--red)'):'var(--muted)';
     const ridx=currentResults.indexOf(r);
+    // Show varietal as a subtitle when it's not already visible in the name
+    const varSub=r.varietal&&!dn.toLowerCase().includes(r.varietal.toLowerCase())
+      ?`<div class="wp" style="color:var(--muted);font-size:11px">${r.varietal}</div>`:'';
     return`<tr class="${!r.matched?'dim':''}" style="cursor:pointer" onclick="showWineDetail(${ridx})">
-      <td style="max-width:200px"><div class="wn">${dn}</div>${r.producer?`<div class="wp">${r.producer}</div>`:''}</td>
+      <td style="max-width:200px"><div class="wn">${dn}</div>${r.producer?`<div class="wp">${r.producer}</div>`:''}${varSub}</td>
       <td>${r.vintage||'NV'}</td>
       <td>${fmt(r.menu_price)}</td>
       <td>${r.retail_price!=null?fmt(r.retail_price):`<span style="color:var(--muted)">—</span>`}</td>

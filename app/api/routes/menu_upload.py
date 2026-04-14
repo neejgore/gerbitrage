@@ -1335,10 +1335,18 @@ async def _batch_analyze(wines: list[dict], source_name: str) -> MenuUploadRespo
             min_r = (ep.min_retail if real_price else None) if ep else None
             max_r = (ep.max_retail if real_price else None) if ep else None
             markup = w["menu_price"] / retail if retail else None
+
+            # Always extract varietal — use catalog value for matches,
+            # fall back to text parser for unmatched wines so we can still
+            # show "Merlot" / "Nebbiolo" in the table even without a catalog hit.
+            from app.services.text_parser import parse_wine_text as _pwt2
+            _parsed = _pwt2(w["desc"])
+            varietal = (ident.varietal if strong else None) or _parsed.varietal
+
             return MenuWineResult(
                 raw_text=w["desc"], vintage=w["vintage"], menu_price=w["menu_price"],
                 matched=strong, wine_name=ident.name if strong else None, producer=ident.producer if strong else None,
-                region=ident.region if strong else None, varietal=ident.varietal if strong else None,
+                region=ident.region if strong else None, varietal=varietal,
                 retail_price=round(retail, 2) if retail is not None else None,
                 wholesale_est=round(wholesale, 2) if wholesale is not None else None,
                 min_retail=min_r, max_retail=max_r,
