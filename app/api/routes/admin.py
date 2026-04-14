@@ -171,7 +171,7 @@ async def vision_check() -> dict:
         import anthropic as _anthropic
         client = _anthropic.AsyncAnthropic(api_key=api_key)
         msg = await client.messages.create(
-            model="claude-3-5-haiku-20241022",
+            model="claude-3-haiku-20240307",
             max_tokens=10,
             messages=[{"role": "user", "content": "Reply with the single word: OK"}],
         )

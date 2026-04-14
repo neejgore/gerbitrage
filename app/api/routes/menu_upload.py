@@ -69,7 +69,7 @@ async def _image_to_text_claude(data: bytes, media_type: str = "image/jpeg") -> 
     client = anthropic.AsyncAnthropic(api_key=api_key)
 
     message = await client.messages.create(
-        model="claude-3-5-haiku-20241022",
+        model="claude-3-haiku-20240307",
         max_tokens=4096,
         messages=[
             {
