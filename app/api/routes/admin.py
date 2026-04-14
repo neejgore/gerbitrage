@@ -146,7 +146,7 @@ async def vision_debug(file: UploadFile = File(...)) -> dict:
     """Upload a menu image and get back Claude's raw structured output before parsing."""
     import os
     from app.api.routes.menu_upload import (
-        _prepare_image_for_claude, _image_to_text_claude, _parse_claude_output
+        _prepare_image_for_claude, _image_to_text_claude, _parse_wines
     )
 
     data = await file.read()
@@ -160,7 +160,7 @@ async def vision_debug(file: UploadFile = File(...)) -> dict:
     try:
         img_data = _prepare_image_for_claude(data, ext)
         raw = await _image_to_text_claude(img_data, "image/jpeg")
-        parsed = _parse_claude_output(raw)
+        parsed = _parse_wines(raw)
         return {
             "claude_raw_output": raw,
             "parsed_entries": parsed,

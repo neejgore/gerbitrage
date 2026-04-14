@@ -370,8 +370,11 @@ def _looks_like_wine_name(desc: str) -> bool:
 _GLASS_SECTION_RE = re.compile(
     r"\b(by\s+the\s+glass|glass\s+pour|wine\s+by\s+glass|btg)\b", re.I
 )
-# Detects X/Y dual-price format (e.g. 16/28, 45/88)
-_DUAL_PRICE_RE = re.compile(r"(\d{1,4})/(\d{1,4})")
+_BOTTLE_SECTION_RE = re.compile(
+    r"\b(by\s+the\s+bottle|bottle\s+list|bottle\s+selection|full\s+bottle)\b", re.I
+)
+# Detects X/Y dual-price format (e.g. 16/28, 45/88) — max 3 digits each to exclude years
+_DUAL_PRICE_RE = re.compile(r"(?<!\d)(\d{1,3})/(\d{1,3})(?!\d)")
 _POURS_PER_BOTTLE = 5  # 5oz pour × 5 = 750ml bottle equivalent
 
 
@@ -391,7 +394,20 @@ def _parse_wines(text: str) -> list[dict]:
     entries: list[dict] = []
     seen: set[tuple] = set()
     used: set[int] = set()
-    in_glass_section = False  # tracks "WINE BY THE GLASS" sections
+
+    # Precompute per-line glass section state so both passes use consistent values
+    _glass_state: list[bool] = []
+    _in_glass = False
+    for _l in lines:
+        if _GLASS_SECTION_RE.search(_l):
+            _in_glass = True
+        elif _BOTTLE_SECTION_RE.search(_l):
+            _in_glass = False
+        # Any ALL-CAPS short section header (≤3 words, no price) resets to bottle
+        elif re.match(r'^[A-Z][A-Z\s&]{2,30}$', _l) and not _PRICE_RE.search(_l) and not _DUAL_PRICE_RE.search(_l):
+            if not _GLASS_SECTION_RE.search(_l):
+                _in_glass = False
+        _glass_state.append(_in_glass)
 
     def _add(desc: str, vintage_str: str | None, price: float, idx: int,
              is_glass: bool = False) -> None:
@@ -423,12 +439,7 @@ def _parse_wines(text: str) -> list[dict]:
 
     # ── Pass 1: everything on one line ─────────────────────────────────────
     for i, line in enumerate(lines):
-        # Update glass-section flag from headers
-        if _GLASS_SECTION_RE.search(line):
-            in_glass_section = True
-        # Reset on "bottle" section cues
-        if re.search(r"\bby\s+the\s+bottle\b|\bbottle\s+list\b", line, re.I):
-            in_glass_section = False
+        is_glass_line = _glass_state[i]
 
         # Check for dual-price format (X/Y) — always indicates glass pricing
         dual = _DUAL_PRICE_RE.search(line)
@@ -472,7 +483,7 @@ def _parse_wines(text: str) -> list[dict]:
             desc = desc_raw
             vintage_str = None
 
-        _add(desc, vintage_str, price, i, is_glass=in_glass_section)
+        _add(desc, vintage_str, price, i, is_glass=is_glass_line)
 
     # ── Pass 2: name on one line, price (+optional year) on the next ───────
     for i in range(len(lines) - 1):
@@ -513,7 +524,7 @@ def _parse_wines(text: str) -> list[dict]:
         vm = list(_VINTAGE_RE.finditer(rest or next_line))
         vintage_str = vm[-1].group(1) if vm else None
 
-        _add(name_line, vintage_str, price, i, is_glass=in_glass_section)
+        _add(name_line, vintage_str, price, i, is_glass=_glass_state[i])
 
     return entries
 
@@ -771,7 +782,7 @@ async def menu_from_url(req: UrlMenuRequest) -> MenuUploadResponse:
         try:
             _img_bytes = _prepare_image_for_claude(data, _ext2)
             claude_raw = await _image_to_text_claude(_img_bytes, "image/jpeg")
-            wines = _parse_claude_output(claude_raw)
+            wines = _parse_wines(claude_raw)
             if wines:
                 return await _run_batch_from_entries(wines, source_name)
         except Exception as exc:
