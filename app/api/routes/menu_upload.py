@@ -44,6 +44,9 @@ You are a scanner. Transcribe every line of text visible in this image exactly a
 - Do NOT use outside knowledge — only copy what you can see.
 - Include everything: wine names, prices, vintages, section headers, regions, notes.
 - If a character is unclear, write your best literal reading of it.
+- MULTI-COLUMN MENUS: if the page has two or more columns of wines side by side,
+  transcribe the LEFT column top-to-bottom first, then the RIGHT column top-to-bottom.
+  Do not interleave the columns row by row.
 """
 
 
@@ -111,14 +114,21 @@ def _parse_claude_output(raw: str) -> list[dict]:
             continue
 
         price_raw = price_raw.replace(",", "").replace("$", "").strip()
-        # Handle residual dual-price format
+        # Handle X/Y/Z or X/Y price formats
         if "/" in price_raw:
             price_parts = [p.strip() for p in price_raw.split("/") if p.strip()]
             try:
-                price = min(float(p) for p in price_parts)  # smaller = 5oz pour
-                is_glass = True
+                vals = [float(p) for p in price_parts]
             except ValueError:
                 continue
+            if len(vals) >= 3 and vals[0] < vals[1] < vals[2]:
+                # Three-tier: glass/half/bottle — use bottle price
+                price = vals[-1]
+                is_glass = False
+            else:
+                # Two-tier: glass pours — use smaller (5oz)
+                price = min(vals)
+                is_glass = True
         else:
             try:
                 price = float(price_raw)
@@ -373,8 +383,12 @@ _GLASS_SECTION_RE = re.compile(
 _BOTTLE_SECTION_RE = re.compile(
     r"\b(by\s+the\s+bottle|bottle\s+list|bottle\s+selection|full\s+bottle)\b", re.I
 )
-# Detects X/Y dual-price format (e.g. 16/28, 45/88) — max 3 digits each to exclude years
+# X/Y/Z three-tier price (glass/half-bottle/bottle) — use the LAST (bottle) price
+_TRIPLE_PRICE_RE = re.compile(r"(?<!\d)(\d{1,3})/(\d{1,3})/(\d{1,3})(?!\d)")
+# X/Y dual-price format (e.g. 16/28) — max 3 digits each to exclude years
 _DUAL_PRICE_RE = re.compile(r"(?<!\d)(\d{1,3})/(\d{1,3})(?!\d)")
+# Bin number prefix: "42." or "42)" at start of line — 1-3 digits only to avoid stripping years
+_BIN_RE = re.compile(r"^\d{1,3}[\.\)]\s+")
 _POURS_PER_BOTTLE = 5  # 5oz pour × 5 = 750ml bottle equivalent
 
 
@@ -411,6 +425,7 @@ def _parse_wines(text: str) -> list[dict]:
 
     def _add(desc: str, vintage_str: str | None, price: float, idx: int,
              is_glass: bool = False) -> None:
+        desc = _BIN_RE.sub("", desc)  # strip leading bin numbers like "42. "
         desc = re.sub(r"\s*[|\-–—,;:]+\s*$", "", desc).strip()
         desc = re.sub(r"\s+((?:19|20)\d{2}|NV|MV)\s*$", "", desc, flags=re.I).strip()
         if not _looks_like_wine_name(desc):
@@ -441,18 +456,35 @@ def _parse_wines(text: str) -> list[dict]:
     for i, line in enumerate(lines):
         is_glass_line = _glass_state[i]
 
-        # Check for dual-price format (X/Y) — always indicates glass pricing
+        # Check for triple-price X/Y/Z (glass/half-bottle/bottle) — use bottle (last)
+        triple = _TRIPLE_PRICE_RE.search(line)
+        if triple:
+            p1, p2, p3 = float(triple.group(1)), float(triple.group(2)), float(triple.group(3))
+            # Non-decreasing tiers and bottle price must be valid (reject random sequences)
+            if p1 <= p2 < p3 and _is_wine_price(p3):
+                desc_raw = line[:triple.start()].strip()
+                vm = list(_VINTAGE_RE.finditer(desc_raw))
+                if vm:
+                    vt = vm[-1]
+                    desc = (desc_raw[:vt.start()] + desc_raw[vt.end():]).strip()
+                    vintage_str: str | None = vt.group(1)
+                else:
+                    desc = desc_raw
+                    vintage_str = None
+                _add(desc, vintage_str, p3, i, is_glass=False)
+                continue  # only skip further parsing if triple was valid
+
+        # Check for dual-price format (X/Y) — indicates glass pricing
         dual = _DUAL_PRICE_RE.search(line)
         if dual:
             lo, hi = float(dual.group(1)), float(dual.group(2))
             glass_price = lo  # smaller = 5oz pour
-            # Name is everything before the dual-price token
             desc_raw = line[:dual.start()].strip()
             vm = list(_VINTAGE_RE.finditer(desc_raw))
             if vm:
                 vt = vm[-1]
                 desc = (desc_raw[:vt.start()] + desc_raw[vt.end():]).strip()
-                vintage_str: str | None = vt.group(1)
+                vintage_str = vt.group(1)
             else:
                 desc = desc_raw
                 vintage_str = None
@@ -492,12 +524,22 @@ def _parse_wines(text: str) -> list[dict]:
         name_line = lines[i]
         next_line = lines[i + 1]
 
-        if _PRICE_RE.search(name_line) or _DUAL_PRICE_RE.search(name_line):
+        if _PRICE_RE.search(name_line) or _DUAL_PRICE_RE.search(name_line) or _TRIPLE_PRICE_RE.search(name_line):
             continue
         if len(name_line) < 5 or _SKIP_RE.match(name_line):
             continue
         if any(kw in name_line.lower() for kw in _SPIRITS_KW):
             continue
+
+        # Check for triple price on next line (glass/half/bottle) — use bottle
+        triple = _TRIPLE_PRICE_RE.search(next_line)
+        if triple:
+            p1, p2, p3 = float(triple.group(1)), float(triple.group(2)), float(triple.group(3))
+            if p1 <= p2 < p3 and _is_wine_price(p3):
+                vm = list(_VINTAGE_RE.finditer(next_line[:triple.start()]))
+                vintage_str = vm[-1].group(1) if vm else None
+                _add(name_line, vintage_str, p3, i, is_glass=False)
+                continue  # only skip further parsing if triple was valid
 
         # Check for dual price on next line
         dual = _DUAL_PRICE_RE.search(next_line)
