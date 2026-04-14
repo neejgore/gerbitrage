@@ -36,15 +36,17 @@ def _pdf_to_text(data: bytes) -> str:
 
 
 _CLAUDE_PROMPT = """\
-You are an OCR tool. Transcribe ALL text visible in this image exactly as it appears — every word, number, and symbol you can see.
+Extract wine entries from this wine list image. Output one line per wine in this format:
+NAME | VINTAGE | PRICE
 
-Rules:
-- Copy text CHARACTER FOR CHARACTER as printed. Do not correct spelling, complete words, or use outside knowledge.
-- Preserve the layout: each line of text on its own line.
-- Include prices, years, wine names, section headers — everything visible.
-- If a word is unclear, write your best literal reading with [?] after it.
-- Do NOT interpret, summarize, or restructure anything.
-- If the image is too dark/blurry to read, output only: CANNOT_READ
+Strict rules:
+- NAME: copy the text EXACTLY as it appears in the image, letter by letter. Do not autocomplete, correct, or use wine knowledge to fill in any part of a name.
+- If you cannot clearly read a word in the name, omit that wine entirely — do not guess.
+- VINTAGE: 4-digit year as printed, or NV if shown, or NONE if absent.
+- PRICE: numeric digits only (no $ or commas). Only include wines with a clearly visible price number.
+- Skip spirits, cocktails, beer, food.
+- Output ONLY the data lines. No headers, notes, or explanation.
+- If the image contains no readable wine list with prices, output: NO_WINES
 """
 
 
@@ -528,15 +530,14 @@ async def upload_menu(file: UploadFile = File(...)) -> MenuUploadResponse:
                     filename, len(_img_data) / 1024,
                 )
                 claude_raw = await _image_to_text_claude(_img_data, media_type)
-                logger.info("Claude OCR output for '%s':\n%s", filename, claude_raw[:1200])
-                if "CANNOT_READ" in claude_raw:
+                logger.info("Claude output for '%s':\n%s", filename, claude_raw[:1200])
+                if "NO_WINES" in claude_raw.strip():
                     raise HTTPException(
                         status_code=422,
-                        detail="Photo is too dark or blurry to read. Try better lighting or a PDF upload.",
+                        detail="No wine list with prices detected. Make sure the photo shows wine names and prices clearly.",
                     )
-                # Parse the raw transcription with our wine-line parser (no Claude interpretation)
-                wines = _parse_wines(claude_raw)
-                logger.info("Parsed %d wine entries from Claude OCR of '%s'", len(wines), filename)
+                wines = _parse_claude_output(claude_raw)
+                logger.info("Parsed %d wine entries from Claude for '%s'", len(wines), filename)
                 if not wines:
                     raise HTTPException(
                         status_code=422,
