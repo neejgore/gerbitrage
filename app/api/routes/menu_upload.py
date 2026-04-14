@@ -483,13 +483,19 @@ _VINTAGE_RE = re.compile(r"\b((?:19|20)\d{2}|N\.?V\.?|M\.?V\.?)\b", re.I)
 _PRICE_RE = re.compile(r"(?<!\d)\$?(\d{2,5}(?:\.\d{1,2})?)(?!\d)")
 
 _SKIP_RE = re.compile(
-    r"^(\d+$|WINE\s+BY\s+THE\s+GLASS|BY THE GLASS|HALF BOTTLES?|MAGNUM|SPARKLING$|ROSE$|ROSÉ$|WHITE$|RED$|BEER"
-    r"|COCKTAIL|MOCKTAIL|SPIRIT|VODKA|GIN|TEQUILA|MEZCAL|RUM|BOURBON"
-    r"|WHISKEY|SCOTCH|COGNAC|CHARDONNAY|PINOT NOIR|CABERNET|ZINFANDEL"
+    # Standalone section headers — must match the WHOLE string ($ anchor prevents
+    # blocking real wine names that start with a grape variety, e.g.
+    # "Cabernet Sauvignon, Anakota" must NOT be blocked by "CABERNET$")
+    r"^(\d+$|WINE\s+BY\s+THE\s+GLASS$|BY\s+THE\s+GLASS$|HALF\s+BOTTLES?$|MAGNUM$"
+    r"|SPARKLING$|ROSÉ?$|WHITE$|RED$|ORANGE$"
+    r"|BEER$|COCKTAILS?$|MOCKTAILS?$|SPIRITS?$|VODKA$|GIN$|TEQUILA$|MEZCAL$|RUM$|BOURBON$"
+    r"|WHISKEY$|SCOTCH$|COGNAC$"
+    r"|CHARDONNAY$|PINOT\s+NOIR$|CABERNET$|CABERNET\s+SAUVIGNON$|ZINFANDEL$"
+    r"|MERLOT$|SYRAH$|SAUVIGNON\s+BLANC$|PINOT\s+GRIGIO$|RIESLING$|GRENACHE$"
     r"|FRANCE$|SPAIN$|ITALY$|GERMANY$|AUSTRIA$|CHAMPAGNE$|BURGUNDY$"
-    r"|BORDEAUX$|DESSERT$|FORTIFIED$|MERLOT$|SYRAH$|SAUVIGNON BLANC$"
+    r"|BORDEAUX$|RHONE$|RHÔNE$|DESSERT$|FORTIFIED$"
     r"|GLASS\s*[/|]\s*BOTTLE|BOTTLE\s*[/|]\s*GLASS|PER\s+GLASS|PER\s+BOTTLE"
-    r"|PAGE\s*\d|TABLE\s*OF\s*CONTENTS|WINE\s*LIST|^\d{1,3}$)",
+    r"|PAGE\s*\d|TABLE\s*OF\s*CONTENTS|WINE\s+LIST|\d{1,3}$)",
     re.I,
 )
 
