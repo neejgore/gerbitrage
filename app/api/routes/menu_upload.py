@@ -335,6 +335,11 @@ _SPIRITS_KW = (
     "tequila", "mezcal", "cognac", "beer", "ale", "lager",
     "pilsner", "ipa", "stout", "soda", "sake", "junmai",
 )
+# Word-boundary spirits filter — prevents substring false-positives
+# (e.g. "ale" ⊄ "aleatico", "beer" ⊄ "beerenauslese")
+_SPIRITS_RE = re.compile(
+    r"\b(" + "|".join(re.escape(k) for k in _SPIRITS_KW) + r")\b", re.I
+)
 
 # Wine critic scores that look like prices — strip BEFORE price detection
 _SCORE_RE = re.compile(
@@ -390,8 +395,9 @@ def _clean_line(raw: str) -> str:
     # Pipe-separated table rows: "Name | 2019 | 145" → "Name 2019 145"
     if "|" in raw:
         raw = " ".join(p.strip() for p in raw.split("|") if p.strip())
-    # European thousands separator: "3.100" → "3100", "1.250" → "1250"
-    # (only when 3 digits after dot; "78.00" has 2 digits so is untouched)
+    # US comma-thousands: "1,250" → "1250" (before other processing)
+    raw = re.sub(r"(?<!\d)(\d{1,3}),(\d{3})(?!\d)", r"\1\2", raw)
+    # European dot-thousands: "3.100" → "3100" (only 3 digits after dot)
     raw = _EURO_THOUSANDS_RE.sub(lambda m: m.group(1) + m.group(2), raw)
     line = _FILL_RE.sub(" ", raw)
     line = re.sub(r"\s{2,}", " ", line).strip()
@@ -477,7 +483,8 @@ def _parse_wines(text: str) -> list[dict]:
       BY THE GLASS / "5 Ounces" → glass section (×5 for markup)
       "W I N E S B Y T H E G L A S S" → spaced-out header
     """
-    lines = [_clean_line(l) for l in text.splitlines() if _clean_line(l)]
+    # Avoid calling _clean_line twice per line (walrus operator)
+    lines = [c for l in text.splitlines() if (c := _clean_line(l))]
     entries: list[dict] = []
     seen: set[tuple] = set()
     used: set[int] = set()
@@ -496,12 +503,14 @@ def _parse_wines(text: str) -> list[dict]:
             _in_glass, _in_half, _in_magnum = False, False, True
         elif _BOTTLE_SECTION_RE.search(_l):
             _in_glass, _in_half, _in_magnum = False, False, False
-        # ALL-CAPS section headers with no price reset to bottle mode
-        elif re.match(r'^[A-Z][A-Z\s&/]{2,40}$', _l) and not _PRICE_RE.search(_l) and not _DUAL_PRICE_RE.search(_l):
-            if not any(fn(_l) for fn in (_GLASS_SECTION_RE.search,
-                                          _HALF_BOTTLE_SECTION_RE.search,
-                                          _MAGNUM_SECTION_RE.search)):
-                _in_glass, _in_half, _in_magnum = False, False, False
+        # ALL-CAPS section headers (including accented chars like RHÔNE) reset to bottle mode.
+        # Use str.upper() comparison which handles Unicode correctly (no ASCII-only regex needed).
+        elif (_l == _l.upper() and 3 <= len(_l) <= 45
+              and not _PRICE_RE.search(_l) and not _DUAL_PRICE_RE.search(_l)
+              and not any(fn(_l) for fn in (_GLASS_SECTION_RE.search,
+                                             _HALF_BOTTLE_SECTION_RE.search,
+                                             _MAGNUM_SECTION_RE.search))):
+            _in_glass, _in_half, _in_magnum = False, False, False
         _glass_state.append(_in_glass)
         _half_bottle_state.append(_in_half)
         _magnum_state.append(_in_magnum)
@@ -528,10 +537,6 @@ def _parse_wines(text: str) -> list[dict]:
         raw = vm[-1].group(1)
         return re.sub(r"\.", "", raw.upper())  # "N.V." → "NV", "2019" → "2019"
 
-    def _strip_vt(s: str) -> str:
-        """Remove trailing vintage token from a name string."""
-        return _VINTAGE_STRIP_RE.sub("", s).strip()
-
     def _strip_vt_inline(s: str) -> str:
         """Remove all inline vintage tokens from a name string."""
         return _VINTAGE_INLINE_RE.sub("", s).strip()
@@ -554,7 +559,8 @@ def _parse_wines(text: str) -> list[dict]:
         desc_alpha = re.sub(r"[^a-zA-Z]", "", desc)
         if desc_alpha and desc_alpha == desc_alpha.upper() and re.search(r"[-–—]", desc):
             return False
-        if any(kw in desc.lower() for kw in _SPIRITS_KW):
+        # Word-boundary check prevents substring hits (ale ⊄ aleatico, beer ⊄ beerenauslese)
+        if _SPIRITS_RE.search(desc):
             return False
         if is_half_bottle:
             menu_price = round(price * 2, 2)
@@ -601,16 +607,20 @@ def _parse_wines(text: str) -> list[dict]:
                 _add(desc, vt, p3, i, is_glass=False, is_half_bottle=False, is_magnum=False)
                 continue
 
-        # Dual-price X/Y — glass pricing, take smaller (5oz) pour
+        # Dual-price X/Y — glass pricing, take the SMALLER of the two values (5oz pour)
         dual = _DUAL_PRICE_RE.search(line)
         if dual:
-            lo = float(dual.group(1))
-            desc_raw = line[:dual.start()].strip()
-            vt = _vt_from(desc_raw)
-            desc = _strip_vt_inline(desc_raw) if vt else desc_raw
-            if _is_wine_price(lo):
+            v1, v2 = float(dual.group(1)), float(dual.group(2))
+            lo, hi = min(v1, v2), max(v1, v2)
+            # Only treat as glass/bottle dual if BOTH values are valid wine prices.
+            # If not credible (e.g. "Lot 19/20 285"), fall through to single-price.
+            if _is_wine_price(lo) and _is_wine_price(hi):
+                desc_raw = line[:dual.start()].strip()
+                vt = _vt_from(desc_raw)
+                desc = _strip_vt_inline(desc_raw) if vt else desc_raw
                 _add(desc, vt, lo, i, is_glass=True)
-            continue
+                continue
+            # Not a credible dual price — fall through to single-price parsing
 
         # Standard single price (or two-column glass/bottle)
         pt = _non_year_prices(line)
@@ -663,14 +673,16 @@ def _parse_wines(text: str) -> list[dict]:
             continue
         if len(name_line) < 5 or _SKIP_RE.match(name_line):
             continue
-        if any(kw in name_line.lower() for kw in _SPIRITS_KW):
+        if _SPIRITS_RE.search(name_line):
             continue
         if i + 1 in used:
             continue
 
-        # Middle line: no real price
+        # Middle line: no real price, not a known section header
         if _has_real_price(mid_line):
             continue
+        if _SKIP_RE.match(mid_line):
+            continue  # e.g. "Red" or "France" between two wine lines — it's a section header
 
         # Price line: must have a real price
         pt = _non_year_prices(price_line)
@@ -678,13 +690,13 @@ def _parse_wines(text: str) -> list[dict]:
             continue
 
         # Continuation heuristic — at least one must be true:
-        #   A) name_line ends with comma (typographic continuation)
-        #   B) mid_line is short AND contains geographic/regional words
-        #   C) mid_line is very short (≤ 30 chars, pure location token)
-        trailing_comma  = name_line.endswith(",")
-        geo_mid         = bool(_GEO_WORDS_RE.search(mid_line))
-        short_mid       = len(mid_line) <= 50
-        very_short_mid  = len(mid_line) <= 30
+        #   A) name_line ends with comma (typographic continuation marker)
+        #   B) mid_line ≤ 50 chars AND contains geographic/regional words
+        #   C) mid_line is very short (≤ 30 chars, single location token like "Carneros")
+        trailing_comma = name_line.endswith(",")
+        geo_mid        = bool(_GEO_WORDS_RE.search(mid_line))
+        short_mid      = len(mid_line) <= 50
+        very_short_mid = len(mid_line) <= 30
         if not (trailing_comma or (short_mid and geo_mid) or very_short_mid):
             continue
 
@@ -699,10 +711,11 @@ def _parse_wines(text: str) -> list[dict]:
         name_clean = _strip_vt_inline(name_line).rstrip(",").strip()
         combined = name_clean + " " + mid_line
 
-        used.add(i + 1)  # prevent Pass 2 treating mid_line as a standalone name
-        _add(combined, vt, price, i,
-             is_glass=_glass_state[i], is_half_bottle=_half_bottle_state[i],
-             is_magnum=_magnum_state[i])
+        # Mark mid_line used ONLY if the entry is successfully added
+        if _add(combined, vt, price, i,
+                is_glass=_glass_state[i], is_half_bottle=_half_bottle_state[i],
+                is_magnum=_magnum_state[i]):
+            used.add(i + 1)
 
     # ── Pass 2: name on one line, price (+optional year) on the next ────────
     for i in range(len(lines) - 1):
@@ -711,12 +724,12 @@ def _parse_wines(text: str) -> list[dict]:
         name_line = lines[i]
         next_line = lines[i + 1]
 
-        # KEY FIX: use _non_year_prices so lines like "Jordan 2023" aren't skipped
+        # Use _has_real_price so lines like "Jordan 2023" (year only) aren't skipped
         if _has_real_price(name_line):
             continue
         if len(name_line) < 5 or _SKIP_RE.match(name_line):
             continue
-        if any(kw in name_line.lower() for kw in _SPIRITS_KW):
+        if _SPIRITS_RE.search(name_line):
             continue
 
         # Triple price on next line
@@ -732,11 +745,13 @@ def _parse_wines(text: str) -> list[dict]:
         # Dual price on next line
         dual = _DUAL_PRICE_RE.search(next_line)
         if dual:
-            glass_price = float(dual.group(1))
-            vt = _vt_from(next_line[:dual.start()]) or _vt_from(name_line)
-            if _is_wine_price(glass_price):
+            dv1, dv2 = float(dual.group(1)), float(dual.group(2))
+            glass_price = min(dv1, dv2)
+            if _is_wine_price(glass_price) and _is_wine_price(max(dv1, dv2)):
+                vt = _vt_from(next_line[:dual.start()]) or _vt_from(name_line)
                 _add(name_line, vt, glass_price, i, is_glass=True)
-            continue
+                continue
+            # Not credible — fall through to single-price
 
         pt = _non_year_prices(next_line)
         if not pt:
