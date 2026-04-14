@@ -59,8 +59,14 @@ Rules:
 - One line per wine, nothing else
 - SKIP any item that is sake, beer, spirits, cocktail, water, juice, tea, coffee, or a flight/package
 - SKIP section headers, descriptions, restaurant policies, or lines with no wine name
-- If the entry is GRAPE, PRODUCER (e.g. "AGLIANICO, CONTRADE DI TAURAUSI 20/38"), reformat as "CONTRADE DI TAURAUSI AGLIANICO"
-- If the entry is GRAPE - PRODUCER VINTAGE CUVEE - REGION PRICE (e.g. "Chardonnay- Sequoia Grove 2023 Estate- Napa Valley 75"), reformat as "SEQUOIA GROVE CHARDONNAY ESTATE". Another example: "Merlot- Freemark Abbey 2017 Stagecoach- Atlas Peak 135" → "FREEMARK ABBEY MERLOT STAGECOACH". The GRAPE must always appear in the output wine name — never drop it.
+- CRITICAL: The GRAPE/VARIETAL must ALWAYS be included in the output. Never drop it.
+- If the entry is GRAPE - PRODUCER VINTAGE CUVEE - REGION PRICE, the output MUST be "PRODUCER GRAPE CUVEE":
+    "Chardonnay- Sequoia Grove 2023 Estate- Napa Valley 75"    → "SEQUOIA GROVE CHARDONNAY ESTATE | 2023 | 75"
+    "Merlot- Freemark Abbey 2017 Stagecoach- Atlas Peak 135"   → "FREEMARK ABBEY MERLOT STAGECOACH | 2017 | 135"
+    "Pinot Noir- Boars View 2020- Ft Ross 105"                 → "BOARS VIEW PINOT NOIR | 2020 | 105"
+    "Cabernet Sauvignon- Aquinas 2021- North Coast 55"         → "AQUINAS CABERNET SAUVIGNON | 2021 | 55"
+    "Sauvignon Blanc- Joseph Cellars 2024- Napa Valley 65"     → "JOSEPH CELLARS SAUVIGNON BLANC | 2024 | 65"
+- If the entry is GRAPE, PRODUCER PRICE (e.g. "AGLIANICO, CONTRADE DI TAURAUSI 20/38"), output "CONTRADE DI TAURAUSI AGLIANICO"
 - Keep the vintage and price EXACTLY as extracted — do NOT add, change, or invent any information
 - PRICE: use the bottle price. If the wine appears in BOTH a by-the-glass section AND a bottle section, output it ONCE with the price as GLASS/BOTTLE (e.g. 21/75). If only a glass price is given, output as GLASS_PRICE | GLASS (4th column).
 - If a wine name is unclear, copy it exactly as printed — never substitute a different wine name
@@ -1337,11 +1343,11 @@ async def _batch_analyze(wines: list[dict], source_name: str) -> MenuUploadRespo
             markup = w["menu_price"] / retail if retail else None
 
             # Always extract varietal — use catalog value for matches,
-            # fall back to text parser for unmatched wines so we can still
-            # show "Merlot" / "Nebbiolo" in the table even without a catalog hit.
+            # fall back to parsed_components (from analyze) then our own parse.
             from app.services.text_parser import parse_wine_text as _pwt2
             _parsed = _pwt2(w["desc"])
-            varietal = (ident.varietal if strong else None) or _parsed.varietal
+            _pc_varietal = (ident.parsed_components.varietal if ident.parsed_components else None)
+            varietal = (ident.varietal if strong else None) or _pc_varietal or _parsed.varietal
 
             return MenuWineResult(
                 raw_text=w["desc"], vintage=w["vintage"], menu_price=w["menu_price"],
