@@ -134,6 +134,36 @@ def _parse_claude_output(raw: str) -> list[dict]:
     return entries
 
 
+def _prepare_image_for_claude(data: bytes, ext: str) -> bytes:
+    """
+    Convert any image (including HEIC) to a JPEG that Claude can accept.
+    - Converts HEIC/HEIF via pillow-heif
+    - Resizes so the longest edge ≤ 1568px (Claude's recommended max)
+    - Re-encodes as JPEG at quality=85 to stay well under the 5 MB API limit
+    """
+    from PIL import Image as _PIL
+
+    # Register HEIC support if available
+    if ext in ("heic", "heif"):
+        try:
+            from pillow_heif import register_heif_opener
+            register_heif_opener()
+        except ImportError:
+            pass
+
+    img = _PIL.open(io.BytesIO(data)).convert("RGB")
+
+    # Claude recommends keeping images ≤ 1568px on the longest edge for speed
+    # and to avoid hitting the ~5 MB base64 payload limit.
+    max_px = 1568
+    if max(img.width, img.height) > max_px:
+        img.thumbnail((max_px, max_px), _PIL.LANCZOS)
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=85, optimize=True)
+    return buf.getvalue()
+
+
 def _image_to_text_tesseract(data: bytes) -> str:
     """Fallback OCR using Tesseract (used when Claude is unavailable)."""
     try:
@@ -498,21 +528,12 @@ async def upload_menu(file: UploadFile = File(...)) -> MenuUploadResponse:
         import os
         if os.environ.get("ANTHROPIC_API_KEY"):
             try:
-                # HEIC/HEIF: convert to JPEG bytes before sending to Claude
-                if _ext in ("heic", "heif"):
-                    try:
-                        from pillow_heif import register_heif_opener
-                        register_heif_opener()
-                    except ImportError:
-                        pass
-                    from PIL import Image as _PILImage
-                    _buf = io.BytesIO()
-                    _PILImage.open(io.BytesIO(data)).convert("RGB").save(_buf, format="JPEG", quality=90)
-                    _img_data = _buf.getvalue()
-                    media_type = "image/jpeg"
-                else:
-                    _img_data = data
-
+                _img_data = _prepare_image_for_claude(data, _ext)
+                media_type = "image/jpeg"  # _prepare always outputs JPEG
+                logger.info(
+                    "Sending '%s' to Claude Vision (%.1f KB)",
+                    filename, len(_img_data) / 1024,
+                )
                 claude_raw = await _image_to_text_claude(_img_data, media_type)
                 logger.debug("Claude raw output for '%s':\n%s", filename, claude_raw[:800])
                 wines = _parse_claude_output(claude_raw)
@@ -522,17 +543,20 @@ async def upload_menu(file: UploadFile = File(...)) -> MenuUploadResponse:
                         status_code=422,
                         detail=(
                             f"No wine entries with prices found in '{filename}'. "
-                            "Make sure the photo shows a wine list with prices clearly visible."
+                            "Make sure the photo clearly shows wine names and prices."
                         ),
                     )
                 return await _run_batch_from_entries(wines, filename)
             except HTTPException:
                 raise
             except Exception as exc:
-                logger.warning("Claude Vision failed for '%s': %s — falling back to Tesseract", filename, exc)
-                # Fall through to Tesseract below
+                logger.error("Claude Vision failed for '%s': %s", filename, exc, exc_info=True)
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Photo analysis failed: {exc}. Please try again or upload a PDF.",
+                ) from exc
 
-        # Tesseract fallback (or if no API key)
+        # Tesseract fallback (only when no API key is configured)
         try:
             text = _image_to_text_tesseract(data)
         except HTTPException:
@@ -668,29 +692,9 @@ async def menu_from_url(req: UrlMenuRequest) -> MenuUploadResponse:
         _ext2 = url_lower.rsplit(".", 1)[-1] if "." in url_lower else "jpeg"
         _mime2 = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
                   "webp": "image/webp"}.get(_ext2, "image/jpeg")
-        _img_bytes = data
-        # HEIC from URL: convert to JPEG before sending to Claude
-        if _ext2 in ("heic", "heif"):
-            try:
-                from pillow_heif import register_heif_opener
-                register_heif_opener()
-            except ImportError:
-                pass
-            try:
-                from PIL import Image as _PILImage
-                _buf = io.BytesIO()
-                _PILImage.open(io.BytesIO(data)).convert("RGB").save(_buf, format="JPEG", quality=90)
-                _img_bytes = _buf.getvalue()
-                _mime2 = "image/jpeg"
-            except Exception:
-                pass
-        # Also use content-type header if extension is unknown
-        elif not _ext2 or _mime2 == "image/jpeg":
-            _ct_mime = content_type.lower().split(";")[0].strip()
-            if _ct_mime in ("image/png", "image/webp", "image/gif"):
-                _mime2 = _ct_mime
         try:
-            claude_raw = await _image_to_text_claude(_img_bytes, _mime2)
+            _img_bytes = _prepare_image_for_claude(data, _ext2)
+            claude_raw = await _image_to_text_claude(_img_bytes, "image/jpeg")
             wines = _parse_claude_output(claude_raw)
             if wines:
                 return await _run_batch_from_entries(wines, source_name)
