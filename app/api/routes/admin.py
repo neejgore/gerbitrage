@@ -139,3 +139,49 @@ def get_stats() -> dict:
         "price_tiers": price_tiers,
         "wine_types": wine_types,
     }
+
+
+@router.get("/vision-check", summary="Verify Claude Vision is configured and working")
+async def vision_check() -> dict:
+    """Quick diagnostic: verifies ANTHROPIC_API_KEY is set and Claude API responds."""
+    import os
+    result: dict = {}
+
+    # 1. Check env var
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    result["api_key_set"] = bool(api_key)
+    result["api_key_prefix"] = api_key[:12] + "..." if api_key else "(not set)"
+
+    if not api_key:
+        result["status"] = "FAIL — ANTHROPIC_API_KEY not found in environment"
+        return result
+
+    # 2. Check package importable
+    try:
+        import anthropic  # noqa: F401
+        result["package_importable"] = True
+        result["package_version"] = getattr(anthropic, "__version__", "unknown")
+    except ImportError as e:
+        result["package_importable"] = False
+        result["status"] = f"FAIL — anthropic package not installed: {e}"
+        return result
+
+    # 3. Make a minimal API call (text only, no image)
+    try:
+        import anthropic as _anthropic
+        client = _anthropic.AsyncAnthropic(api_key=api_key)
+        msg = await client.messages.create(
+            model="claude-3-5-haiku-20241022",
+            max_tokens=10,
+            messages=[{"role": "user", "content": "Reply with the single word: OK"}],
+        )
+        reply = msg.content[0].text if msg.content else "(empty)"
+        result["api_call"] = "success"
+        result["api_reply"] = reply
+        result["status"] = "OK — Claude Vision ready"
+    except Exception as e:
+        result["api_call"] = "failed"
+        result["api_error"] = str(e)
+        result["status"] = f"FAIL — API call error: {e}"
+
+    return result
