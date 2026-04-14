@@ -1217,9 +1217,13 @@ async def _batch_analyze(wines: list[dict], source_name: str) -> MenuUploadRespo
             ident = resp.identification
             retail = ep.avg_retail if ep else None
             markup = w["menu_price"] / retail if retail else None
+            # Only count as truly matched when confidence is high enough.
+            # Weak matches (medium/low) still surface as best-guess name but
+            # are not counted as confirmed catalog hits.
+            strong = ident.matched and ident.confidence_level in ("very_high", "high")
             return MenuWineResult(
                 raw_text=w["desc"], vintage=w["vintage"], menu_price=w["menu_price"],
-                matched=ident.matched, wine_name=ident.name, producer=ident.producer,
+                matched=strong, wine_name=ident.name if strong else None, producer=ident.producer if strong else None,
                 region=ident.region, varietal=ident.varietal,
                 retail_price=round(retail, 2) if retail is not None else None,
                 wholesale_est=round(ep.estimated_wholesale, 2) if ep and ep.estimated_wholesale is not None else None,

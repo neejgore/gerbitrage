@@ -849,7 +849,50 @@ def _regional_proxy(parsed: ParsedWine, raw_text: str = "") -> Optional[DynamicP
     """
     Use parsed region / appellation / varietal to estimate a retail price range.
     Returns None only when we cannot form any useful match.
+
+    Varietal-only fallbacks (low, mid, high) are used when no region is parsed.
+    These are broad averages across all price tiers for that grape.
     """
+    # Varietal-only fallback — used when region is unknown
+    _VARIETAL_FALLBACK: dict[str, tuple[float, float, float]] = {
+        "pinot noir":           (25,  55,  150),
+        "cabernet sauvignon":   (25,  65,  200),
+        "chardonnay":           (18,  40,  120),
+        "merlot":               (18,  40,  100),
+        "syrah":                (20,  50,  140),
+        "shiraz":               (15,  35,   90),
+        "nebbiolo":             (35,  75,  250),
+        "sangiovese":           (18,  40,  100),
+        "tempranillo":          (18,  40,   90),
+        "malbec":               (15,  35,   80),
+        "grenache":             (22,  45,  120),
+        "mourvedre":            (22,  45,  120),
+        "riesling":             (18,  38,   90),
+        "sauvignon blanc":      (15,  30,   70),
+        "viognier":             (18,  38,   90),
+        "gruner veltliner":     (18,  35,   80),
+        "zinfandel":            (18,  40,   90),
+        "petite sirah":         (18,  40,   90),
+        "cabernet franc":       (22,  50,  140),
+        "petit verdot":         (22,  50,  130),
+        "aglianico":            (18,  40,  100),
+        "barbera":              (15,  30,   70),
+        "montepulciano":        (12,  25,   60),
+        "primitivo":            (15,  30,   70),
+        "nero d avola":         (15,  30,   70),
+        "garnacha":             (18,  40,   90),
+        "godello":              (20,  40,   90),
+        "albarino":             (18,  35,   75),
+        "vermentino":           (15,  28,   65),
+        "fiano":                (18,  35,   80),
+        "greco":                (18,  35,   80),
+        "chenin blanc":         (15,  35,   90),
+        "pinot gris":           (18,  35,   80),
+        "pinot grigio":         (12,  25,   60),
+        "gewurztraminer":       (18,  35,   80),
+        "koshu":                (20,  40,   80),
+        "daiginjo":             (30,  60,  150),
+    }
     # Build a list of candidate keys from most-specific to least-specific
     candidates: list[str] = []
 
@@ -945,6 +988,28 @@ def _regional_proxy(parsed: ParsedWine, raw_text: str = "") -> Optional[DynamicP
             max_retail=float(high),
             estimated_wholesale=wholesale,
             data_source="regional_proxy",
+            data_confidence="low",
+            price_tier=tier,
+            notes=note,
+        )
+        return _apply_producer_premium(base, raw_text) if raw_text else base
+
+    # Last resort: varietal-only fallback when no region matched
+    v_key = _norm_key(varietal) if varietal else ""
+    if v_key and v_key in _VARIETAL_FALLBACK:
+        low, mid, high = _VARIETAL_FALLBACK[v_key]
+        tier = _price_to_tier(mid)
+        wholesale = _estimate_wholesale(mid, tier)
+        note = (
+            f"No region data. Varietal estimate for '{varietal}' "
+            f"(typical retail: ${low}–${high}). Wide range — treat as rough guide."
+        )
+        base = DynamicPricingResult(
+            avg_retail=float(mid),
+            min_retail=float(low),
+            max_retail=float(high),
+            estimated_wholesale=wholesale,
+            data_source="varietal_proxy",
             data_confidence="low",
             price_tier=tier,
             notes=note,

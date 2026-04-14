@@ -79,7 +79,12 @@ async def _run_analysis(
     markup = None
     dynamic_pricing: Optional[DynamicPricingResult] = None
 
-    if ident.matched and ident.wine_id:
+    # Only trust a catalog match when confidence is high enough.
+    # Medium/low matches (score < 0.85) are too unreliable — we've seen Lioco
+    # matched to Meiomi, Anakota to Bond, etc.  Fall through to Vivino instead.
+    _strong_match = ident.matched and ident.wine_id and ident.confidence_level in ("very_high", "high")
+
+    if _strong_match:
         from app.services.wine_identifier import get_wine_by_id_full
         wine = get_wine_by_id_full(ident.wine_id)
         if wine:
@@ -102,7 +107,7 @@ async def _run_analysis(
                     wine_name=wine.name,
                 )
     else:
-        # ── Dynamic lookup for catalog misses ─────────────────────────────
+        # ── Dynamic lookup for catalog misses or weak matches ─────────────
         from app.services.text_parser import parse_wine_text
         parsed = parse_wine_text(req.menu_text)
         if req.vintage:
@@ -181,7 +186,7 @@ async def _run_analysis(
             last_updated=pricing.last_updated,
         )
 
-    elif ident.matched and ident.wine_id:
+    elif _strong_match and ident.wine_id:
         # Path A2: catalog hit but no live pricing yet — fall back to the
         # catalog's hand-curated reference price so users always see a number.
         from app.services.wine_identifier import get_wine_by_id_full as _get_wine
