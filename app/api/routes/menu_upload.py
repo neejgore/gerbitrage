@@ -397,12 +397,17 @@ def _prepare_image_for_claude(data: bytes, ext: str) -> tuple[bytes, str]:
                     break
         return buf.getvalue(), "image/jpeg"
 
-    # Non-HEIC: use original bytes if they fit, otherwise resize minimally
+    # Non-HEIC: use original bytes if they fit, otherwise resize minimally.
+    # Detect actual format from bytes (not extension) — files from phones often
+    # have .png extension but are actually JPEG, which causes a 400 from Claude API.
     if len(data) <= MAX_BYTES:
-        media_type = {
-            "jpg": "image/jpeg", "jpeg": "image/jpeg",
-            "png": "image/png", "webp": "image/webp",
-        }.get(ext, "image/jpeg")
+        try:
+            detected = _PIL.open(io.BytesIO(data))
+            fmt = (detected.format or "").upper()
+            media_type = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}.get(fmt, "image/jpeg")
+        except Exception:
+            media_type = {"jpg": "image/jpeg", "jpeg": "image/jpeg",
+                          "png": "image/png", "webp": "image/webp"}.get(ext, "image/jpeg")
         return data, media_type
 
     # Oversized non-HEIC — shrink just enough to fit
