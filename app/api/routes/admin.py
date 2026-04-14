@@ -141,6 +141,36 @@ def get_stats() -> dict:
     }
 
 
+@router.post("/vision-debug", summary="Upload an image and see Claude's raw OCR output")
+async def vision_debug(file: "UploadFile") -> dict:
+    """Upload a menu image and get back Claude's raw structured output before parsing."""
+    import os
+    from fastapi import UploadFile as _UF
+    from app.api.routes.menu_upload import (
+        _prepare_image_for_claude, _image_to_text_claude, _parse_claude_output
+    )
+
+    data = await file.read()
+    filename = file.filename or "upload"
+    ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else "jpeg"
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return {"error": "ANTHROPIC_API_KEY not set"}
+
+    try:
+        img_data = _prepare_image_for_claude(data, ext)
+        raw = await _image_to_text_claude(img_data, "image/jpeg")
+        parsed = _parse_claude_output(raw)
+        return {
+            "claude_raw_output": raw,
+            "parsed_entries": parsed,
+            "entry_count": len(parsed),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.get("/vision-check", summary="Verify Claude Vision is configured and working")
 async def vision_check() -> dict:
     """Quick diagnostic: verifies ANTHROPIC_API_KEY is set and Claude API responds."""
