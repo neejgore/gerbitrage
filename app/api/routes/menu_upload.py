@@ -64,7 +64,7 @@ async def _image_to_text_claude(data: bytes, media_type: str = "image/jpeg") -> 
     client = anthropic.AsyncAnthropic(api_key=api_key)
 
     message = await client.messages.create(
-        model="claude-3-haiku-20240307",
+        model="claude-3-5-sonnet-20241022",
         max_tokens=4096,
         messages=[
             {
@@ -624,6 +624,10 @@ def _parse_wines(text: str) -> list[dict]:
             if _is_wine_price(lo) and _is_wine_price(hi):
                 desc_raw = line[:dual.start()].strip()
                 vt = _vt_from(desc_raw)
+                # Vintage lookahead: many menus put region+vintage on the line below
+                # e.g. "AGLIANICO, CONTRADE DI TAURAUSI 20/38" / "irpinia, italy 2019"
+                if not vt and i + 1 < len(lines) and not _has_real_price(lines[i + 1]):
+                    vt = _vt_from(lines[i + 1])
                 desc = _strip_vt_inline(desc_raw) if vt else desc_raw
                 _add(desc, vt, lo, i, is_glass=True)
                 continue
