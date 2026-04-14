@@ -36,14 +36,7 @@ def _pdf_to_text(data: bytes) -> str:
 
 
 _CLAUDE_PROMPT = """\
-Please transcribe all the text visible in this wine menu image, line by line, exactly as it appears.
-
-- Output the raw text only — one printed line per output line.
-- Copy every word and number exactly as printed. Do not correct, rephrase, or add anything.
-- Include everything: wine names, prices, vintages, regions, section headers, notes.
-- Do not use outside knowledge — only copy what you can literally see in the image.
-- If two columns appear side by side, transcribe the left column first, then the right.
-- No markdown, no bullet points, no commentary.
+What wines are listed on this menu? For each wine include the name exactly as printed, the vintage year if shown, and the price. List them one per line.
 """
 
 
@@ -99,6 +92,129 @@ async def _image_to_text_claude(data: bytes, media_type: str = "image/jpeg") -> 
             raise  # any other error (auth, rate-limit, etc.) — propagate immediately
 
     raise RuntimeError(f"No Claude vision model available. Last error: {last_err}")
+
+
+def _parse_claude_natural(raw: str) -> list[dict]:
+    """
+    Parse Claude's natural conversational output when asked "what wines are on this menu?"
+
+    Claude naturally responds with lines like:
+      • Aglianico, Contrade di Taurausi — Irpinia, Italy 2019 — $20/38
+      • Cabernet Sauvignon, Anakota — Knights Valley, California 2022 — $45/88
+      Leos Cuvée Augusta - Provence, France 2023 - $16/28
+      Japan Flight (3oz of each) — $59
+
+    Strategy: for each non-empty line, strip bullets/markdown, find the price at the
+    end, find the vintage year, and treat the remainder as the wine name.
+    """
+    _POURS = 5
+    entries: list[dict] = []
+    seen: set[tuple] = set()
+
+    # Detect glass-section context from headers in the output
+    _in_glass = False
+
+    for raw_line in raw.splitlines():
+        line = raw_line.strip()
+        # Strip leading markdown bullets, dashes, numbers
+        line = re.sub(r"^[\-\*•·▸►\d\.]+\s*", "", line).strip()
+        if not line or len(line) < 4:
+            continue
+
+        # Detect glass-section headers like "Rosé (5oz/9oz)" or "Red (5oz/9oz)"
+        if re.search(r"\b\d+\s*oz\b", line, re.I) and len(line) < 40:
+            _in_glass = True
+            continue
+        if re.search(r"\bby\s+the\s+(glass|bottle)\b", line, re.I):
+            _in_glass = True if "glass" in line.lower() else False
+            continue
+
+        # Skip pure section headers with no price
+        if re.match(r"^(here'?s?\s+what|here are|the\s+menu|wines?\s+list|rosé?|red|white|sparkling|dessert|fortified)\b.*$", line, re.I):
+            if not re.search(r"\$?\d{2,}", line):
+                continue
+
+        # ----- Extract price -----
+        # Look for price patterns at the end: $20/38, $16/28, $59, 20/38, 45/88
+        price_match = re.search(
+            r"\$?(\d{1,3}(?:\.\d{2})?)\s*/\s*(\d{1,3}(?:\.\d{2})?)(?:\s*/\s*(\d{1,3}(?:\.\d{2})?))?(?:\s*$|\s*[\(\[])",
+            line,
+        )
+        single_price_match = re.search(r"\$(\d{2,5}(?:\.\d{2})?)\s*(?:$|[\(\[])", line)
+
+        is_glass = _in_glass
+        price: float | None = None
+
+        if price_match:
+            vals = [float(price_match.group(g)) for g in (1, 2, 3) if price_match.group(g)]
+            if len(vals) == 3 and vals[0] < vals[1] < vals[2]:
+                price = vals[2]          # X/Y/Z → bottle price
+                is_glass = False
+            else:
+                price = min(vals)        # X/Y → smaller = glass price
+                is_glass = True
+            # Trim price from line
+            line = line[:price_match.start()].strip()
+        elif single_price_match:
+            price = float(single_price_match.group(1))
+            line = line[:single_price_match.start()].strip()
+
+        if price is None or not (8 <= price <= 50_000):
+            continue
+
+        # ----- Extract vintage -----
+        vt_match = re.search(r"\b((?:19|20)\d{2}|NV|MV)\b", line, re.I)
+        vintage: int | None = None
+        if vt_match:
+            raw_vt = vt_match.group(1).upper()
+            if re.match(r"^\d{4}$", raw_vt):
+                vintage = int(raw_vt)
+            line = (line[:vt_match.start()] + line[vt_match.end():]).strip()
+
+        # ----- Extract wine name (strip region after dash separators) -----
+        # Pattern: "Wine Name — Region, Country" or "Wine Name - Region"
+        # Keep only the part before the first " — " or " - Region" pattern
+        name = line
+        for sep in (" — ", " – ", " - "):
+            if sep in name:
+                parts = name.split(sep)
+                # The wine name is before the first separator that leads into a region/country
+                name = parts[0].strip()
+                break
+
+        # Clean trailing punctuation
+        name = re.sub(r"[\s,\-–—:;]+$", "", name).strip()
+        # Strip parenthetical pour sizes from name
+        name = re.sub(r"\s*\(\s*\d+\s*oz[^)]*\)", "", name, flags=re.I).strip()
+
+        if not name or len(name) < 3:
+            continue
+        if not _looks_like_wine_name(name):
+            continue
+        if _SKIP_RE.match(name):
+            continue
+        if _REGION_LINE_RE.match(name):
+            continue
+        if _SPIRITS_RE.search(name):
+            continue
+
+        menu_price = round(price * _POURS, 2) if is_glass else price
+        if not (8 <= menu_price <= 50_000):
+            continue
+
+        display = f"{name} (by glass)" if is_glass else name
+        key = (name.lower()[:45], vintage, int(menu_price))
+        if key in seen:
+            continue
+        seen.add(key)
+        entries.append({
+            "desc": display,
+            "vintage": vintage,
+            "menu_price": menu_price,
+            "glass_price": price if is_glass else None,
+        })
+
+    return entries
 
 
 def _parse_claude_output(raw: str) -> list[dict]:
@@ -942,8 +1058,8 @@ async def upload_menu(file: UploadFile = File(...)) -> MenuUploadResponse:
                     filename, len(_img_data) / 1024, media_type,
                 )
                 claude_raw = await _image_to_text_claude(_img_data, media_type)
-                logger.info("Claude transcription for '%s':\n%s", filename, claude_raw[:1500])
-                wines = _parse_wines(claude_raw)
+                logger.info("Claude output for '%s':\n%s", filename, claude_raw[:2000])
+                wines = _parse_claude_natural(claude_raw)
                 logger.info("Parsed %d wine entries from Claude transcription of '%s'", len(wines), filename)
                 if not wines:
                     raise HTTPException(
@@ -1102,7 +1218,7 @@ async def menu_from_url(req: UrlMenuRequest) -> MenuUploadResponse:
         try:
             _img_bytes, _mime2 = _prepare_image_for_claude(data, _ext2)
             claude_raw = await _image_to_text_claude(_img_bytes, _mime2)
-            wines = _parse_wines(claude_raw)
+            wines = _parse_claude_natural(claude_raw)
             if wines:
                 return await _run_batch_from_entries(wines, source_name)
         except Exception as exc:
