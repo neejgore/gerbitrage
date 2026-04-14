@@ -269,7 +269,38 @@ td.mc { font-weight: 600; font-variant-numeric: tabular-nums; }
   .price-col:first-child { border-right: none; border-bottom: 1px solid var(--border); }
   .res-tbl th:nth-child(3), .res-tbl td:nth-child(3),
   .res-tbl th:nth-child(5), .res-tbl td:nth-child(5) { display: none; }
+  .stats-row { grid-template-columns: repeat(3,1fr); }
+  .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .res-tbl { min-width: 420px; font-size: 12px; }
 }
+
+/* ── Wine detail sheet ───────────────────────────────────────────────────── */
+.detail-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:100; }
+.detail-overlay.open { display:block; }
+.detail-sheet {
+  position:fixed; left:0; right:0; bottom:0; z-index:101;
+  background:var(--card); border-top:1px solid var(--border);
+  border-radius:18px 18px 0 0;
+  padding:20px 20px 36px;
+  max-height:82vh; overflow-y:auto;
+  transform:translateY(100%);
+  transition:transform .28s cubic-bezier(.4,0,.2,1);
+}
+.detail-sheet.open { transform:translateY(0); }
+.detail-drag { width:36px; height:4px; background:var(--border); border-radius:2px; margin:0 auto 18px; }
+.detail-wine-name { font-size:18px; font-weight:700; line-height:1.3; margin-bottom:3px; }
+.detail-producer { font-size:12px; color:var(--muted); margin-bottom:18px; }
+.detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:18px; }
+.detail-cell { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+.detail-cell-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px; }
+.detail-cell-value { font-size:17px; font-weight:700; }
+.detail-cell-sub { font-size:11px; color:var(--muted); margin-top:2px; }
+.detail-range { font-size:12px; color:var(--muted); text-align:center; margin-bottom:16px; }
+.detail-actions { display:flex; gap:10px; }
+.detail-btn { flex:1; padding:12px; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer; border:none; transition:opacity .15s; }
+.detail-btn:hover { opacity:.85; }
+.detail-btn-primary { background:var(--accent); color:#fff; }
+.detail-btn-secondary { background:var(--surface); color:var(--text); border:1px solid var(--border); }
 </style>
 </head>
 <body>
@@ -692,6 +723,71 @@ function renderUpload(out,data){
   </div>`;
 }
 
+function showWineDetail(idx){
+  const r=currentResults[idx];
+  if(!r)return;
+  const dn=r.wine_name||r.raw_text;
+  const mc=r.markup!=null?(r.markup<0.8?'var(--green)':r.markup<=1.5?'#6ee7b7':r.markup<=2.5?'var(--amber)':'var(--red)'):'var(--muted)';
+  const ws=r.wholesale_est!=null?fmt(r.wholesale_est):'—';
+  const retail=r.retail_price!=null?fmt(r.retail_price):'—';
+  const rangeStr=(r.min_retail!=null&&r.max_retail!=null)?`Market range: ${fmt(r.min_retail)} – ${fmt(r.max_retail)}`:'';
+  const src=r.price_source?`<span style="font-size:11px;color:var(--muted)">Source: ${r.price_source.replace(/_/g,' ')}</span>`:'';
+  const meta=[r.region,r.varietal].filter(Boolean).join(' · ');
+
+  document.getElementById('detailContent').innerHTML=`
+    <div class="detail-wine-name">${dn}</div>
+    <div class="detail-producer">${[r.producer,meta].filter(Boolean).join(' · ')||'Unmatched'} ${dealBadge(r.deal_rating)}</div>
+    <div class="detail-grid">
+      <div class="detail-cell">
+        <div class="detail-cell-label">Menu Price</div>
+        <div class="detail-cell-value">${fmt(r.menu_price)}</div>
+        <div class="detail-cell-sub">Vintage: ${r.vintage||'NV'}</div>
+      </div>
+      <div class="detail-cell">
+        <div class="detail-cell-label">Retail Avg</div>
+        <div class="detail-cell-value">${retail}</div>
+        <div class="detail-cell-sub">${src}</div>
+      </div>
+      <div class="detail-cell">
+        <div class="detail-cell-label">Wholesale Est.</div>
+        <div class="detail-cell-value">${ws}</div>
+        <div class="detail-cell-sub">Approx. cost to restaurant</div>
+      </div>
+      <div class="detail-cell">
+        <div class="detail-cell-label">Markup</div>
+        <div class="detail-cell-value" style="color:${mc}">${r.markup!=null?r.markup.toFixed(2)+'×':'—'}</div>
+        <div class="detail-cell-sub">${r.markup!=null?(r.markup<0.8?'Below retail — steal!':(r.markup<=1.5?'Good deal':(r.markup<=2.5?'Fair pricing':'Expensive'))):'No data'}</div>
+      </div>
+    </div>
+    ${rangeStr?`<div class="detail-range">${rangeStr}</div>`:''}
+    <div class="detail-actions">
+      <button class="detail-btn detail-btn-primary" onclick="exploreInSearch('${(dn).replace(/'/g,"\\'")}',${r.vintage||'null'})">Explore vintages →</button>
+      <button class="detail-btn detail-btn-secondary" onclick="closeDetail()">Close</button>
+    </div>`;
+  document.getElementById('detailOverlay').classList.add('open');
+  document.getElementById('detailSheet').classList.add('open');
+}
+
+function closeDetail(){
+  document.getElementById('detailOverlay').classList.remove('open');
+  document.getElementById('detailSheet').classList.remove('open');
+}
+
+function exploreInSearch(name,vintage){
+  closeDetail();
+  // Switch to search tab and pre-fill
+  document.querySelectorAll('.tab-btn')[0].click();
+  const inp=document.getElementById('searchInput');
+  inp.value=name;
+  inp.dispatchEvent(new Event('input'));
+  // Trigger search after a short delay so AC can populate
+  setTimeout(()=>{
+    const vintageEl=document.getElementById('vintageInput');
+    if(vintageEl&&vintage)vintageEl.value=vintage;
+    doSearch();
+  },400);
+}
+
 function setFilter(f){
   currentFilter=f;
   document.querySelectorAll('.filter-btn').forEach((b,i)=>
@@ -712,11 +808,12 @@ function buildTable(results,filter){
   if(!rows.length)return`<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No wines in this category.</div>`;
   const ord={steal:0,good:1,fair:2,expensive:3,unknown:4};
   rows.sort((a,b)=>(ord[a.deal_rating]||4)-(ord[b.deal_rating]||4));
-  const trs=rows.map(r=>{
+  const trs=rows.map((r,i)=>{
     const dn=r.wine_name||r.raw_text;
     const mc=r.markup!=null?(r.markup<0.8?'var(--green)':r.markup<=1.5?'#6ee7b7':r.markup<=2.5?'var(--amber)':'var(--red)'):'var(--muted)';
-    return`<tr class="${!r.matched?'dim':''}">
-      <td style="max-width:220px"><div class="wn">${dn}</div>${r.producer?`<div class="wp">${r.producer}</div>`:''}</td>
+    const ridx=currentResults.indexOf(r);
+    return`<tr class="${!r.matched?'dim':''}" style="cursor:pointer" onclick="showWineDetail(${ridx})">
+      <td style="max-width:200px"><div class="wn">${dn}</div>${r.producer?`<div class="wp">${r.producer}</div>`:''}</td>
       <td>${r.vintage||'NV'}</td>
       <td>${fmt(r.menu_price)}</td>
       <td>${r.retail_price!=null?fmt(r.retail_price):`<span style="color:var(--muted)">—</span>`}</td>
@@ -725,10 +822,17 @@ function buildTable(results,filter){
     </tr>`;
   }).join('');
   return`<table class="res-tbl">
-    <thead><tr><th>Wine</th><th>Vintage</th><th>Menu</th><th>Retail</th><th>Mult.</th><th>Rating</th></tr></thead>
+    <thead><tr><th>Wine</th><th>Vintage</th><th>Menu</th><th>Retail</th><th>×</th><th>Rating</th></tr></thead>
     <tbody>${trs}</tbody>
   </table>`;
 }
 </script>
+<!-- Wine detail sheet -->
+<div class="detail-overlay" id="detailOverlay" onclick="closeDetail()"></div>
+<div class="detail-sheet" id="detailSheet">
+  <div class="detail-drag"></div>
+  <div id="detailContent"></div>
+</div>
+
 </body>
 </html>
