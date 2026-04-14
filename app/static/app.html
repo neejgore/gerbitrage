@@ -130,13 +130,6 @@ main { max-width: 780px; margin: 0 auto; padding: 48px 24px 80px; }
   background: rgba(255,255,255,.04); border: 1px solid var(--border); color: var(--muted);
 }
 
-.conf-badge {
-  font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 4px;
-  white-space: nowrap; flex-shrink: 0; letter-spacing: 0.05em; text-transform: uppercase;
-}
-.conf-very_high, .conf-high { background: var(--green-d); color: var(--green); }
-.conf-medium  { background: var(--amber-d); color: var(--amber); }
-.conf-low, .conf-none { background: var(--red-d); color: var(--red); }
 
 /* ── Pricing grid ─────────────────────────────────────────────────────────── */
 .rc-prices { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--border); }
@@ -381,7 +374,6 @@ function switchTab(n){
 // ── Formatters ────────────────────────────────────────────────────────────────
 const fmt = v=>v==null?'—':'$'+v.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
 
-function confLabel(cl){return{very_high:'Very High',high:'High',medium:'Medium',low:'Low',none:'None'}[cl]||cl||'—';}
 
 function dealBadge(r){
   const m={steal:['b-steal','STEAL'],good:['b-good','DEAL'],fair:['b-fair','FAIR'],expensive:['b-expensive','PRICEY'],unknown:['b-unknown','—']};
@@ -505,27 +497,22 @@ async function doSearch(isRetry){
 
 function renderResult(d, query, isRetry){
   const ident=d.identification||{},ep=d.effective_pricing;
+  const src=ep?.price_source||'';
+  const isLiveData = src==='market_live';
+  const isCatalogData = src==='catalog';
 
   if(!ident.matched){
-    // Show a regional estimate if we have one (from dynamic_lookup)
-    if(ep&&ep.avg_retail) return renderCard({
-      wineName:query,producer:'',region:'',varietal:'',
-      confidence:0,confidenceLevel:'none',
-      retail:ep.avg_retail,wholesale:ep.estimated_wholesale,
-      minRetail:ep.min_retail,maxRetail:ep.max_retail,
-      dataConf:ep.data_confidence,note:ep.price_basis_note,
-      isEstimate:true,query,
-    });
+    // Skip regional/varietal estimates — go straight to Vivino discovery.
+    // Estimates are unreliable; Vivino is the only trusted fallback.
 
-    // First attempt: show "searching Vivino in background" with countdown
     if(!isRetry){
       _startDiscoveryCountdown(query);
       return`<div class="discovery-state" id="discoveryCard">
         <div style="font-size:24px">🔍</div>
         <div class="discovery-title">Searching Vivino for "${query}"</div>
         <div class="discovery-sub">
-          Not in our catalog yet — we're searching Vivino in the background.
-          If found, it'll be added to the catalog automatically.
+          Not in our catalog yet — searching Vivino in the background.
+          If found, pricing will load automatically.
         </div>
         <div class="discovery-progress"><div class="discovery-bar"></div></div>
         <div class="discovery-countdown" id="discCountdown">Checking in 22 seconds…</div>
@@ -536,13 +523,12 @@ function renderResult(d, query, isRetry){
       </div>`;
     }
 
-    // Retry also failed — wine genuinely not on Vivino or scrape failed
     return`<div class="not-found">
       <div style="font-size:28px">🍷</div>
       <div class="not-found-title">"${query}" not found</div>
       <div class="not-found-sub">
-        Vivino didn't return a match. Try a more specific name (include producer),
-        or check Vivino directly.
+        Not found in our catalog or on Vivino. Try including the producer name,
+        or search Vivino directly.
       </div>
       <div style="margin-top:4px">${vivinoBtn(query,'Search on Vivino')}</div>
     </div>`;
@@ -551,11 +537,10 @@ function renderResult(d, query, isRetry){
   return renderCard({
     wineName:ident.name||query,producer:ident.producer,
     region:ident.region,varietal:ident.varietal,vintage:ident.vintage,
-    confidence:ident.confidence,confidenceLevel:ident.confidence_level,
     retail:ep?.avg_retail,wholesale:ep?.estimated_wholesale,
     minRetail:ep?.min_retail,maxRetail:ep?.max_retail,
-    dataConf:ep?.data_confidence,source:ep?.price_source,
-    note:ep?.price_basis_note,isEstimate:false,query,
+    isLiveData, isCatalogData,
+    note:ep?.price_basis_note,query,
   });
 }
 
@@ -577,12 +562,21 @@ function renderCard(p){
   const vintStr=p.vintage?` ${p.vintage}`:'';
   const tags=[p.region,p.varietal].filter(Boolean).map(t=>`<span class="tag">${t}</span>`).join('');
 
-  const isCatalogRef=p.source==='catalog';
+  // Determine price label and style based on data freshness
+  const priceIsLive = p.isLiveData;         // real market data
+  const priceIsCatalog = p.isCatalogData;   // curated reference, no live fetch yet
+
+  const retailLabel = priceIsCatalog
+    ? `Retail (est.) <span style="font-size:10px;opacity:.6">reference</span>`
+    : `Retail (avg)`;
+  const retailColor = priceIsLive ? 'green' : priceIsCatalog ? '' : 'green';
+  const retailStyle = priceIsCatalog ? 'color:var(--amber)' : '';
+
   const priceHTML=hasPrice?`
     <div class="rc-prices">
       <div class="price-col">
-        <div class="price-label">Retail (avg)${isCatalogRef?' <span style="font-size:10px;opacity:.6">(ref)</span>':''}</div>
-        <div class="price-value ${isCatalogRef?'':'green'}" style="${isCatalogRef?'color:var(--amber)':''}">${fmt(p.retail)}</div>
+        <div class="price-label">${retailLabel}</div>
+        <div class="price-value ${retailColor}" style="${retailStyle}">${fmt(p.retail)}</div>
         ${p.minRetail&&p.maxRetail?`<div class="price-range">Range ${fmt(p.minRetail)} – ${fmt(p.maxRetail)}</div>`:''}
       </div>
       <div class="price-col">
@@ -591,9 +585,13 @@ function renderCard(p){
         <div class="price-range">~${p.wholesale&&p.retail?Math.round(p.wholesale/p.retail*100):50}% of retail</div>
       </div>
     </div>
-  `:`<div class="no-price">No pricing cached yet — background worker will price this soon.</div>`;
+  `:`<div class="no-price">No pricing data yet — searching Vivino in the background.</div>`;
 
   const vqName=p.producer&&!p.wineName.toLowerCase().includes(p.producer.toLowerCase())?`${p.producer} ${p.wineName}${p.vintage?' '+p.vintage:''}`:p.wineName+(p.vintage?' '+p.vintage:'');
+
+  const priceNote = priceIsCatalog
+    ? `<span style="color:var(--amber)">⚠️ Reference price only — live market data not yet loaded</span>`
+    : priceIsLive ? `<span style="color:var(--muted)">Live market data</span>` : '';
 
   return`<div class="result-card">
     <div class="rc-header">
@@ -602,15 +600,12 @@ function renderCard(p){
           <div class="rc-name">${p.wineName}${vintStr}</div>
           ${p.producer?`<div class="rc-producer">${p.producer}</div>`:''}
         </div>
-        ${!p.isEstimate?`<span class="conf-badge conf-${p.confidenceLevel}">${confLabel(p.confidenceLevel)}</span>`:'<span class="conf-badge conf-low">ESTIMATE</span>'}
       </div>
       ${tags?`<div class="rc-tags">${tags}</div>`:''}
     </div>
     ${priceHTML}
     <div class="rc-footer">
-      ${hasPrice?`<span><strong>Data:</strong> ${isCatalogRef?'catalog reference':p.dataConf||'—'}</span>`:''}
-      ${isCatalogRef?`<span style="color:var(--amber)">Catalog reference — live market data pending</span>`:''}
-      ${p.isEstimate?`<span style="color:var(--amber)">Regional estimate — not live market data</span>`:''}
+      ${priceNote}
       <div class="rc-footer-right">${vivinoBtn(vqName)}</div>
     </div>
   </div>`;
@@ -731,12 +726,16 @@ function showWineDetail(idx){
   const ws=r.wholesale_est!=null?fmt(r.wholesale_est):'—';
   const retail=r.retail_price!=null?fmt(r.retail_price):'—';
   const rangeStr=(r.min_retail!=null&&r.max_retail!=null)?`Market range: ${fmt(r.min_retail)} – ${fmt(r.max_retail)}`:'';
-  const src=r.price_source?`<span style="font-size:11px;color:var(--muted)">Source: ${r.price_source.replace(/_/g,' ')}</span>`:'';
+  const srcLabel={'market_live':'Live market data','catalog':'Reference price (not yet verified live)','regional_estimate':'Rough estimate — price not confirmed','varietal_proxy':'Rough estimate — price not confirmed'}[r.price_source]||'';
+  const srcColor=r.price_source==='market_live'?'var(--muted)':(r.price_source==='catalog'?'var(--amber)':'var(--amber)');
+  const src=srcLabel?`<span style="font-size:11px;color:${srcColor}">${srcLabel}</span>`:'';
   const meta=[r.region,r.varietal].filter(Boolean).join(' · ');
+  const isEstimated=r.price_source==='regional_estimate'||r.price_source==='varietal_proxy'||!r.retail_price;
 
   document.getElementById('detailContent').innerHTML=`
     <div class="detail-wine-name">${dn}</div>
-    <div class="detail-producer">${[r.producer,meta].filter(Boolean).join(' · ')||'Unmatched'} ${dealBadge(r.deal_rating)}</div>
+    <div class="detail-producer">${[r.producer,meta].filter(Boolean).join(' · ')||'Not in catalog'} ${dealBadge(r.deal_rating)}</div>
+    ${isEstimated?`<div style="background:var(--amber-d);color:var(--amber);padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:4px">⚠️ Price not confirmed — this is a rough estimate only</div>`:''}
     <div class="detail-grid">
       <div class="detail-cell">
         <div class="detail-cell-label">Menu Price</div>
