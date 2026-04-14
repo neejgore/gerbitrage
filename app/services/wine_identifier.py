@@ -122,17 +122,15 @@ def _producer_gate(query_producer: str, entry: "_CatalogEntry") -> bool:
         # verify against.  Block the match: we cannot confirm it is correct.
         return False
 
-    # Build the searchable text from the catalog entry
-    entry_text = _re.sub(
-        r"[^a-z0-9\s]", "",
-        (entry.normalized_producer + " " + entry.normalized_name).lower()
-    )
-    entry_words = set(entry_text.split())
+    # Check the catalog entry's PRODUCER field only.
+    # Intentionally NOT checking the wine name — a query producer of "Farella"
+    # should NOT match "Realm Cellars Farella Vineyard" just because "Farella"
+    # appears as a *vineyard name* inside the wine name.
+    producer_text = _re.sub(r"[^a-z0-9\s]", "", entry.normalized_producer.lower())
+    producer_words = set(producer_text.split())
 
-    # At least ONE identifying token must appear in the catalog entry.
-    # (We don't require all of them — a cuvée name like "Mirabelle" may not
-    # be in the catalog even though "Schramsberg" is.)
-    return bool(id_tokens & entry_words)
+    # At least ONE identifying token must appear in the catalog producer name.
+    return bool(id_tokens & producer_words)
 
 
 def _significant_tokens(text: str) -> set[str]:
