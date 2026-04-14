@@ -1115,6 +1115,8 @@ class MenuUploadResponse(BaseModel):
     fair_deals: int
     expensive: int
     results: list[MenuWineResult]
+    job_id: Optional[str] = None          # poll /menu/results/{job_id} for price updates
+    pricing_pending: int = 0              # number of wines still being priced via Vivino
 
 
 def _deal_rating(markup: Optional[float]) -> str:
@@ -1244,25 +1246,35 @@ async def _run_batch(text: str, source_name: str) -> MenuUploadResponse:
     return await _batch_analyze(wines, source_name)
 
 
-async def _prefetch_vivino(wines: list[dict]) -> None:
-    """
-    Run Vivino lookups for all wines concurrently before returning results.
-    Results are written to Redis cache so the subsequent _run_analysis calls
-    find them as cache hits rather than triggering fire-and-forget tasks.
+def _vivino_job_key(job_id: str) -> str:
+    return f"menu_job:{job_id}"
 
-    Capped at 45 seconds total — whatever finishes in time is used.
+
+async def _launch_vivino_background(job_id: str, wines: list[dict]) -> None:
+    """
+    Fire Vivino lookups for all unmatched wines as background asyncio tasks.
+    Does NOT block — returns immediately after creating the tasks.
+
+    Progress is tracked in Redis so the polling endpoint can report status.
+    Each task marks itself done in Redis when it finishes (success or failure).
     """
     import unicodedata as _ud
+    import uuid as _uuid
     from app.services.text_parser import parse_wine_text as _pwt
     from app.services.vivino_dynamic import dynamic_lookup as _vivino_lookup
+    from app.services.cache import cache_set, cache_get
 
-    vivino_sem = asyncio.Semaphore(4)  # 4 concurrent Playwright browsers
+    vivino_sem = asyncio.Semaphore(4)  # max 4 concurrent Playwright browsers
 
     def _slugify(s: str) -> str:
         nfkd = _ud.normalize("NFD", s.lower())
         s2 = "".join(c for c in nfkd if _ud.category(c) != "Mn")
         s2 = re.sub(r"[^a-z0-9]+", "-", s2).strip("-")
         return s2[:60]
+
+    # Store job metadata (wine list) in Redis so polling endpoint can query it
+    job_data = [{"desc": w["desc"], "vintage": w.get("vintage"), "menu_price": w["menu_price"]} for w in wines]
+    await cache_set(_vivino_job_key(job_id), {"wines": job_data, "done": [], "total": len(wines)}, ttl=3600)
 
     async def _one(w: dict) -> None:
         async with vivino_sem:
@@ -1272,35 +1284,31 @@ async def _prefetch_vivino(wines: list[dict]) -> None:
             wine_id = _slugify(f"{producer}-{wine_name}" if producer else wine_name)
             try:
                 await asyncio.wait_for(
-                    _vivino_lookup(
-                        wine_id=wine_id,
-                        wine_name=wine_name,
-                        producer=producer,
-                        vintage=w.get("vintage"),
-                    ),
-                    timeout=30,
+                    _vivino_lookup(wine_id=wine_id, wine_name=wine_name,
+                                   producer=producer, vintage=w.get("vintage")),
+                    timeout=60,
                 )
-            except Exception:
-                pass  # timeout or scrape failure — just skip
+                logger.info("Vivino: priced '%s'", w["desc"][:50])
+            except Exception as exc:
+                logger.debug("Vivino skip '%s': %s", w["desc"][:40], exc)
+            finally:
+                # Mark this wine as processed regardless of outcome
+                try:
+                    job = await cache_get(_vivino_job_key(job_id))
+                    if job:
+                        job.setdefault("done", []).append(wine_id)
+                        await cache_set(_vivino_job_key(job_id), job, ttl=3600)
+                except Exception:
+                    pass
 
-    tasks = [asyncio.create_task(_one(w)) for w in wines]
-    try:
-        await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=45)
-    except asyncio.TimeoutError:
-        for t in tasks:
-            t.cancel()
-    logger.info("Vivino prefetch complete for %d wines", len(wines))
+    # Fire all tasks — they run independently in the event loop background
+    for w in wines:
+        asyncio.create_task(_one(w), name=f"vivino:{job_id}:{w['desc'][:20]}")
 
 
 async def _batch_analyze(wines: list[dict], source_name: str) -> MenuUploadResponse:
     """Run parallel analysis on a list of pre-validated wine dicts."""
-    # Pre-fetch Vivino prices for all wines concurrently so the first run
-    # returns real pricing rather than requiring a second request.
-    try:
-        await _prefetch_vivino(wines)
-    except Exception as exc:
-        logger.warning("Vivino prefetch failed: %s", exc)
-
+    import uuid as _uuid
     sem = asyncio.Semaphore(10)
 
     async def _analyze(w: dict) -> MenuWineResult:
@@ -1342,6 +1350,16 @@ async def _batch_analyze(wines: list[dict], source_name: str) -> MenuUploadRespo
             )
 
     results: list[MenuWineResult] = list(await asyncio.gather(*[_analyze(w) for w in wines]))
+
+    # Launch Vivino background tasks for wines without real pricing.
+    # This is non-blocking — results trickle in and can be polled.
+    unpriced = [w for w, r in zip(wines, results) if not r.retail_price]
+    job_id: Optional[str] = None
+    if unpriced:
+        job_id = str(_uuid.uuid4())
+        await _launch_vivino_background(job_id, unpriced)
+        logger.info("Launched Vivino background job %s for %d wines", job_id, len(unpriced))
+
     return MenuUploadResponse(
         filename=source_name,
         total_parsed=len(results),
@@ -1353,6 +1371,8 @@ async def _batch_analyze(wines: list[dict], source_name: str) -> MenuUploadRespo
         fair_deals=sum(1 for r in results if r.deal_rating == "fair"),
         expensive=sum(1 for r in results if r.deal_rating == "expensive"),
         results=results,
+        job_id=job_id,
+        pricing_pending=len(unpriced),
     )
 
 
@@ -1425,3 +1445,99 @@ async def menu_from_url(req: UrlMenuRequest) -> MenuUploadResponse:
 
     # Fallback: regex parser (less reliable for complex HTML menus)
     return await _run_batch(text, source_name)
+
+
+# ── Vivino pricing poll endpoint ────────────────────────────────────────────
+
+class PricingUpdate(BaseModel):
+    wine_id: str
+    desc: str
+    retail_price: Optional[float] = None
+    wholesale_est: Optional[float] = None
+    markup: Optional[float] = None
+    deal_rating: str = "unknown"
+    price_source: Optional[str] = None
+
+
+class JobStatusResponse(BaseModel):
+    job_id: str
+    total: int
+    done: int
+    finished: bool
+    updates: list[PricingUpdate]
+
+
+@router.get("/results/{job_id}", response_model=JobStatusResponse, summary="Poll Vivino pricing updates for a menu job")
+async def menu_job_results(job_id: str) -> JobStatusResponse:
+    """
+    Returns current Vivino pricing state for a background job created by
+    `/menu/upload` or `/menu/from-url`.
+
+    Poll every 10–15 seconds.  `finished` becomes `true` when all wines
+    have been attempted.  Re-run `_run_analysis` per wine so we get
+    the latest Redis cache hit from any Vivino task that has completed.
+    """
+    from app.services.cache import cache_get
+
+    job = await cache_get(_vivino_job_key(job_id))
+    if not job:
+        raise HTTPException(404, "Job not found or expired")
+
+    wines: list[dict] = job.get("wines", [])
+    done_set: set = set(job.get("done", []))
+    total = job.get("total", len(wines))
+    done_count = len(done_set)
+
+    sem = asyncio.Semaphore(5)
+    updates: list[PricingUpdate] = []
+
+    async def _check(w: dict) -> Optional[PricingUpdate]:
+        async with sem:
+            req = AnalyzeRequest(menu_text=w["desc"], menu_price=w["menu_price"], vintage=w.get("vintage"))
+            try:
+                resp = await _run_analysis(req, db=None)
+            except Exception:
+                return None
+            ep = resp.estimated_price
+            if not ep or not ep.avg_retail:
+                return None
+            src = ep.price_source.value if ep.price_source else ""
+            _REAL_SOURCES = {"market_live", "catalog"}
+            if src not in _REAL_SOURCES:
+                return None
+            retail = ep.avg_retail
+            menu_p = w["menu_price"]
+            markup = menu_p / retail if retail else None
+            import unicodedata as _ud2
+            def _slug2(s: str) -> str:
+                n = _ud2.normalize("NFD", s.lower())
+                s2 = "".join(c for c in n if _ud2.category(c) != "Mn")
+                s2 = re.sub(r"[^a-z0-9]+", "-", s2).strip("-")
+                return s2[:60]
+            parsed = resp.parsed_wine
+            wname = (parsed.wine_name if parsed else None) or w["desc"]
+            prod = (parsed.producer if parsed else None) or ""
+            wid = _slug2(f"{prod}-{wname}" if prod else wname)
+            return PricingUpdate(
+                wine_id=wid,
+                desc=w["desc"],
+                retail_price=round(retail, 2),
+                wholesale_est=round(ep.estimated_wholesale, 2) if ep.estimated_wholesale else None,
+                markup=round(markup, 2) if markup else None,
+                deal_rating=_deal_rating(markup),
+                price_source=src,
+            )
+
+    check_tasks = [_check(w) for w in wines]
+    raw = await asyncio.gather(*check_tasks, return_exceptions=True)
+    for r in raw:
+        if isinstance(r, PricingUpdate):
+            updates.append(r)
+
+    return JobStatusResponse(
+        job_id=job_id,
+        total=total,
+        done=done_count,
+        finished=(done_count >= total),
+        updates=updates,
+    )

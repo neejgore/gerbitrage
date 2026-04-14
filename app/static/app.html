@@ -649,6 +649,77 @@ function _setDropZone(state, file){
 }
 
 let currentResults=[],currentFilter='all';
+let _vivinoJobId=null,_vivinoPollTimer=null,_vivinoPendingCount=0;
+
+function _startVivino(jobId, pendingCount){
+  _vivinoJobId=jobId;
+  _vivinoPendingCount=pendingCount;
+  _updateVivinoBanner();
+  if(_vivinoPollTimer) clearInterval(_vivinoPollTimer);
+  // Poll every 12 seconds while we have a job
+  _vivinoPollTimer=setInterval(_pollVivino,12000);
+}
+
+function _stopVivino(){
+  if(_vivinoPollTimer){clearInterval(_vivinoPollTimer);_vivinoPollTimer=null;}
+  _vivinoJobId=null;
+  const b=document.getElementById('vivinoBanner');
+  if(b) b.remove();
+}
+
+function _updateVivinoBanner(){
+  let b=document.getElementById('vivinoBanner');
+  const out=document.getElementById('uploadResult');
+  if(!out||!_vivinoJobId) return;
+  if(!b){
+    b=document.createElement('div');
+    b.id='vivinoBanner';
+    b.style.cssText='background:#1e293b;border:1px solid #334155;border-radius:8px;padding:10px 16px;margin-bottom:12px;font-size:12px;color:#94a3b8;display:flex;align-items:center;gap:10px';
+    out.insertBefore(b, out.firstChild);
+  }
+  b.innerHTML=`<div class="spinner" style="width:14px;height:14px;border-width:2px;flex-shrink:0"></div>
+    <span>Fetching live Vivino prices for <strong style="color:#e2e8f0">${_vivinoPendingCount}</strong> wines — prices will update automatically</span>`;
+}
+
+async function _pollVivino(){
+  if(!_vivinoJobId) return;
+  try{
+    const res=await fetch('/menu/results/'+_vivinoJobId);
+    if(!res.ok){ _stopVivino(); return; }
+    const data=await res.json();
+    let updated=0;
+    for(const u of (data.updates||[])){
+      const idx=currentResults.findIndex(r=>r.raw_text===u.desc||(r.wine_name&&r.wine_name===u.desc));
+      if(idx>=0 && !currentResults[idx].retail_price){
+        currentResults[idx].retail_price=u.retail_price;
+        currentResults[idx].wholesale_est=u.wholesale_est;
+        currentResults[idx].markup=u.markup;
+        currentResults[idx].deal_rating=u.deal_rating;
+        currentResults[idx].price_source=u.price_source;
+        updated++;
+      }
+    }
+    if(updated>0) _refreshTable();
+    _vivinoPendingCount=Math.max(0,(data.total||0)-(data.updates||[]).length);
+    if(data.finished){
+      _vivinoPendingCount=0;
+      _stopVivino();
+      _refreshTable();
+    } else {
+      _updateVivinoBanner();
+    }
+  }catch(e){/* network error while phone wakes up — try again next tick */}
+}
+
+function _refreshTable(){
+  const tw=document.getElementById('tableWrap');
+  if(tw) tw.innerHTML=buildTable(currentResults,currentFilter);
+}
+
+// Poll immediately when the user returns to the page (screen unlock / tab focus)
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden && _vivinoJobId) _pollVivino();
+});
 
 async function uploadFile(file){
   _setDropZone('selected', file);
@@ -669,7 +740,9 @@ async function uploadFile(file){
     }
     _setDropZone('idle');
     currentResults=data.results||[];currentFilter='all';
+    _stopVivino();
     renderUpload(out,data);
+    if(data.job_id && data.pricing_pending>0) _startVivino(data.job_id,data.pricing_pending);
   }catch(e){
     _setDropZone('error');
     showErr(out,'Upload failed — '+e.message);
@@ -692,7 +765,9 @@ async function analyzeUrl(){
     const data=await safeJson(res);
     if(!res.ok){showErr(out,fmtDetail(data.detail));return;}
     currentResults=data.results||[];currentFilter='all';
+    _stopVivino();
     renderUpload(out,data);
+    if(data.job_id && data.pricing_pending>0) _startVivino(data.job_id,data.pricing_pending);
   }catch(e){showErr(out,'Request failed — '+e.message);}
 }
 
