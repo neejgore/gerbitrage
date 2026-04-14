@@ -35,20 +35,62 @@ def _pdf_to_text(data: bytes) -> str:
     return "\n".join(pages)
 
 
-_CLAUDE_SYSTEM = (
-    "You are a helpful assistant. When shown an image, answer based only on "
-    "what is literally visible. Do not add, infer, or substitute anything "
-    "from your own knowledge."
+# ── Step 1: extract wines exactly as printed ──────────────────────────────────
+_EXTRACT_SYSTEM = (
+    "You are a menu scanner. Report ONLY text that is literally visible in the image. "
+    "Never add, infer, or substitute wine names from your own knowledge. "
+    "Copy names exactly as printed, even if they look unusual."
 )
+_EXTRACT_PROMPT = "what wines are listed here?"
 
-_CLAUDE_PROMPT = "what wines are listed here?"
+# ── Step 2: normalise raw names for catalog matching ──────────────────────────
+_NORMALISE_SYSTEM = (
+    "You are a wine expert. Given a raw list of wines exactly as printed on a menu, "
+    "reformat each one into standard wine catalog format: Producer, Wine Name, so it "
+    "can be looked up in a database. Keep the vintage and price unchanged."
+)
+_NORMALISE_PROMPT_TPL = """\
+Here are wines extracted from a menu. Reformat each into:
+PRODUCER WINE_NAME | VINTAGE | PRICE
+
+Rules:
+- One line per wine
+- If the entry is GRAPE, PRODUCER PRICE (e.g. "AGLIANICO, CONTRADE DI TAURAUSI 20/38"), reformat as "CONTRADE DI TAURAUSI AGLIANICO"
+- Keep the vintage and price exactly as extracted
+- Output nothing else
+
+Wines:
+{wines}
+"""
 
 
-async def _image_to_text_claude(data: bytes, media_type: str = "image/jpeg") -> str:
-    """Use Claude Vision to transcribe a wine menu image.
+async def _claude_call(
+    client: "anthropic.AsyncAnthropic",
+    system: str,
+    messages: list,
+    model: str,
+    max_tokens: int = 4096,
+) -> str:
+    msg = await client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        system=system,
+        messages=messages,
+    )
+    for block in (msg.content or []):
+        if hasattr(block, "text"):
+            return block.text
+    return ""
 
-    Tries models in descending capability order, falling back if the account
-    does not have access to a given model (HTTP 404 not_found_error).
+
+async def _extract_and_normalise_wines(data: bytes, media_type: str) -> str:
+    """
+    Two-step Claude pipeline:
+      1. Ask Claude to read what wines are literally printed on the menu image.
+      2. Ask Claude to reformat those raw names into standard catalog format.
+
+    Separating these steps prevents hallucination: step 1 is anchored to the
+    image; step 2 is pure text reformatting with no image involved.
     """
     import base64
     import os
@@ -62,39 +104,52 @@ async def _image_to_text_claude(data: bytes, media_type: str = "image/jpeg") -> 
     client = anthropic.AsyncAnthropic(api_key=api_key)
 
     _MODELS = [
-        "claude-sonnet-4-6",           # latest + best vision quality
-        "claude-haiku-4-5",            # fast, capable fallback
-        "claude-sonnet-4-5",           # previous sonnet generation
-        # Note: claude-3-haiku-20240307 is retired April 19 2026 — do not use
-    ]
-
-    content = [
-        {
-            "type": "image",
-            "source": {"type": "base64", "media_type": media_type, "data": b64},
-        },
-        {"type": "text", "text": _CLAUDE_PROMPT},
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5",
+        "claude-sonnet-4-5",
     ]
 
     last_err: Exception | None = None
     for model in _MODELS:
         try:
-            message = await client.messages.create(
+            # ── Step 1: extract from image ────────────────────────────────────
+            raw = await _claude_call(
+                client,
+                system=_EXTRACT_SYSTEM,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "source": {"type": "base64",
+                                                       "media_type": media_type, "data": b64}},
+                        {"type": "text", "text": _EXTRACT_PROMPT},
+                    ],
+                }],
                 model=model,
-                max_tokens=4096,
-                system=_CLAUDE_SYSTEM,
-                messages=[{"role": "user", "content": content}],
             )
-            for block in (message.content or []):
-                if hasattr(block, "text"):
-                    return block.text
-            return ""
+            if not raw.strip():
+                continue
+
+            logger.info("Step 1 (extract) output:\n%s", raw[:2000])
+
+            # ── Step 2: normalise for catalog matching ────────────────────────
+            normalised = await _claude_call(
+                client,
+                system=_NORMALISE_SYSTEM,
+                messages=[{
+                    "role": "user",
+                    "content": _NORMALISE_PROMPT_TPL.format(wines=raw),
+                }],
+                model=model,
+            )
+
+            logger.info("Step 2 (normalise) output:\n%s", normalised[:2000])
+            return normalised
+
         except Exception as exc:
-            # 404 not_found_error means this account can't access the model — try next
             if "not_found_error" in str(exc) or "404" in str(exc):
                 last_err = exc
                 continue
-            raise  # any other error (auth, rate-limit, etc.) — propagate immediately
+            raise
 
     raise RuntimeError(f"No Claude vision model available. Last error: {last_err}")
 
@@ -1068,9 +1123,8 @@ async def upload_menu(file: UploadFile = File(...)) -> MenuUploadResponse:
                     "Sending '%s' to Claude Vision (%.1f KB, %s)",
                     filename, len(_img_data) / 1024, media_type,
                 )
-                claude_raw = await _image_to_text_claude(_img_data, media_type)
-                logger.info("Claude output for '%s':\n%s", filename, claude_raw[:2000])
-                wines = _parse_claude_natural(claude_raw)
+                claude_raw = await _extract_and_normalise_wines(_img_data, media_type)
+                wines = _parse_claude_output(claude_raw)  # pipe-delimited after step 2
                 logger.info("Parsed %d wine entries from Claude transcription of '%s'", len(wines), filename)
                 if not wines:
                     raise HTTPException(
@@ -1228,8 +1282,8 @@ async def menu_from_url(req: UrlMenuRequest) -> MenuUploadResponse:
                   "webp": "image/webp"}.get(_ext2, "image/jpeg")
         try:
             _img_bytes, _mime2 = _prepare_image_for_claude(data, _ext2)
-            claude_raw = await _image_to_text_claude(_img_bytes, _mime2)
-            wines = _parse_claude_natural(claude_raw)
+            claude_raw = await _extract_and_normalise_wines(_img_bytes, _mime2)
+            wines = _parse_claude_output(claude_raw)
             if wines:
                 return await _run_batch_from_entries(wines, source_name)
         except Exception as exc:
