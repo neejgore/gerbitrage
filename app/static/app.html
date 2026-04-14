@@ -851,15 +851,16 @@ function exploreInSearch(name,vintage){
   closeDetail();
   // Switch to search tab and pre-fill
   document.querySelectorAll('.tab-btn')[0].click();
+  _pickedWineId=null;  // clear any stale pinned wine from previous search
   const inp=document.getElementById('searchInput');
   inp.value=name;
-  inp.dispatchEvent(new Event('input'));
-  // Trigger search after a short delay so AC can populate
+  hideAc();
+  // Trigger search after a short delay so the tab transition completes
   setTimeout(()=>{
-    const vintageEl=document.getElementById('vintageInput');
+    const vintageEl=document.getElementById('vintageSelect');
     if(vintageEl&&vintage)vintageEl.value=vintage;
     doSearch();
-  },400);
+  },300);
 }
 
 function setFilter(f){

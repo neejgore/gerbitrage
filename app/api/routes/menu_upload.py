@@ -60,7 +60,7 @@ Rules:
 - SKIP any item that is sake, beer, spirits, cocktail, water, juice, tea, coffee, or a flight/package
 - SKIP section headers, descriptions, restaurant policies, or lines with no wine name
 - If the entry is GRAPE, PRODUCER (e.g. "AGLIANICO, CONTRADE DI TAURAUSI 20/38"), reformat as "CONTRADE DI TAURAUSI AGLIANICO"
-- If the entry is GRAPE - PRODUCER VINTAGE - REGION PRICE (e.g. "Chardonnay- Sequoia Grove 2023 Estate- Napa Valley 75"), reformat as "SEQUOIA GROVE CHARDONNAY ESTATE"
+- If the entry is GRAPE - PRODUCER VINTAGE CUVEE - REGION PRICE (e.g. "Chardonnay- Sequoia Grove 2023 Estate- Napa Valley 75"), reformat as "SEQUOIA GROVE CHARDONNAY ESTATE". Another example: "Merlot- Freemark Abbey 2017 Stagecoach- Atlas Peak 135" → "FREEMARK ABBEY MERLOT STAGECOACH". The GRAPE must always appear in the output wine name — never drop it.
 - Keep the vintage and price EXACTLY as extracted — do NOT add, change, or invent any information
 - PRICE: use the bottle price. If the wine appears in BOTH a by-the-glass section AND a bottle section, output it ONCE with the price as GLASS/BOTTLE (e.g. 21/75). If only a glass price is given, output as GLASS_PRICE | GLASS (4th column).
 - If a wine name is unclear, copy it exactly as printed — never substitute a different wine name
@@ -486,7 +486,7 @@ def _image_to_text_tesseract(data: bytes) -> str:
         pass
 
     try:
-        img = Image.open(io.BytesIO(data)).convert("RGB")
+    img = Image.open(io.BytesIO(data)).convert("RGB")
     except Exception as exc:
         raise HTTPException(
             status_code=422,
@@ -902,7 +902,7 @@ def _parse_wines(text: str) -> list[dict]:
                 vt = _vt_from(desc_raw)
                 desc = _strip_vt_inline(desc_raw) if vt else desc_raw
                 _add(desc, vt, p3, i, is_glass=False, is_half_bottle=False, is_magnum=False)
-                continue
+            continue
 
         # Dual-price X/Y — glass pricing, take the SMALLER of the two values (5oz pour)
         dual = _DUAL_PRICE_RE.search(line)
@@ -920,7 +920,7 @@ def _parse_wines(text: str) -> list[dict]:
                     vt = _vt_from(lines[i + 1])
                 desc = _strip_vt_inline(desc_raw) if vt else desc_raw
                 _add(desc, vt, lo, i, is_glass=True)
-                continue
+            continue
             # Not a credible dual price — fall through to single-price parsing
 
         # Standard single price (or two-column glass/bottle)
@@ -942,7 +942,7 @@ def _parse_wines(text: str) -> list[dict]:
                 desc = _strip_vt_inline(desc_raw) if vt else desc_raw
                 _add(desc, vt, g_price, i, is_glass=True)
                 _add(desc, vt, b_price, i, is_glass=False, is_half_bottle=is_hb, is_magnum=is_mg)
-                continue
+            continue
 
         price_pos, price_str = pt[-1]
         price = float(price_str.replace(",", ""))
