@@ -554,6 +554,13 @@ def _parse_wines(text: str) -> list[dict]:
             return False
         if _SKIP_RE.match(desc):
             return False
+        # Reject section-header lines that contain wine-service keywords
+        # e.g. "WINE BY THE GLASS", "HALF BOTTLE LIST", "MAGNUM SELECTIONS"
+        if (_GLASS_SECTION_RE.search(desc)
+                or _HALF_BOTTLE_SECTION_RE.search(desc)
+                or _MAGNUM_SECTION_RE.search(desc)
+                or _BOTTLE_SECTION_RE.search(desc)):
+            return False
         # Reject ALL-CAPS section headers like "FRANCE – BURGUNDY" or "RHÔNE VALLEY"
         # Real wine names are always mixed-case (e.g. "Château Pétrus", not "CHÂTEAU PÉTRUS")
         desc_alpha = re.sub(r"[^a-zA-Z]", "", desc)
@@ -675,6 +682,9 @@ def _parse_wines(text: str) -> list[dict]:
             continue
         if _SPIRITS_RE.search(name_line):
             continue
+        if (_GLASS_SECTION_RE.search(name_line) or _HALF_BOTTLE_SECTION_RE.search(name_line)
+                or _MAGNUM_SECTION_RE.search(name_line) or _BOTTLE_SECTION_RE.search(name_line)):
+            continue
         if i + 1 in used:
             continue
 
@@ -730,6 +740,9 @@ def _parse_wines(text: str) -> list[dict]:
         if len(name_line) < 5 or _SKIP_RE.match(name_line):
             continue
         if _SPIRITS_RE.search(name_line):
+            continue
+        if (_GLASS_SECTION_RE.search(name_line) or _HALF_BOTTLE_SECTION_RE.search(name_line)
+                or _MAGNUM_SECTION_RE.search(name_line) or _BOTTLE_SECTION_RE.search(name_line)):
             continue
 
         # Triple price on next line
