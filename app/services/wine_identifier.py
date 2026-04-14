@@ -95,42 +95,43 @@ _PRODUCER_GENERIC = frozenset([
 
 import re as _re
 
-def _producer_id_tokens(producer: str) -> set[str]:
-    """
-    Return the tokens in a producer name that are actually identifying
-    (i.e. not generic winery words or geographic placeholders).
-    """
-    tokens = set(_re.sub(r"[^a-z0-9\s]", "", producer.lower()).split())
-    return {t for t in tokens if t not in _PRODUCER_GENERIC and len(t) >= 3}
+def _norm_producer(p: str) -> str:
+    """Lowercase, strip accents/punctuation, expand common abbreviations."""
+    import unicodedata
+    nfkd = unicodedata.normalize("NFD", p.lower())
+    s = "".join(c for c in nfkd if unicodedata.category(c) != "Mn")
+    s = _re.sub(r"[^a-z0-9\s]", " ", s)
+    # Expand abbreviations so "Mt Brave" == "Mount Brave"
+    s = _re.sub(r"\bmt\b", "mount", s)
+    s = _re.sub(r"\bst\b", "saint", s)
+    s = _re.sub(r"\bste\b", "sainte", s)
+    s = _re.sub(r"\bdr\b", "doctor", s)
+    return _re.sub(r"\s+", " ", s).strip()
 
 
 def _producer_gate(query_producer: str, entry: "_CatalogEntry") -> bool:
     """
-    Hard gate: returns False (reject) if the query has identifying producer
-    tokens that do NOT appear anywhere in the catalog entry's producer OR
-    wine name.  This prevents "Napa Cellars" → "Cakebread Cellars",
-    "Joseph Cellars" → "Josh Cellars", etc.
+    Hard gate based on direct string similarity between producer names.
 
-    Returns True (pass) when:
-    - the query producer has no identifying tokens (pure generic/geo), OR
-    - at least one identifying token appears in the catalog entry text.
+    We use RapidFuzz token_set_ratio so minor word-order or punctuation
+    differences ("Mt. Brave" vs "Mt Brave", "Patz & Hall" vs "Patz Hall")
+    still pass, while completely different names ("Monte Tondo" vs "Tedeschi",
+    "Farella" vs "Realm Cellars") are correctly blocked.
+
+    Threshold: 85 — high enough to block unrelated names, low enough to
+    allow common abbreviations and punctuation variations.
     """
-    id_tokens = _producer_id_tokens(query_producer)
-    if not id_tokens:
-        # The producer name consists entirely of generic/geographic words
-        # (e.g. "Napa Cellars", "Valley Wines") — no unique identifier to
-        # verify against.  Block the match: we cannot confirm it is correct.
+    if not query_producer:
         return False
 
-    # Check the catalog entry's PRODUCER field only.
-    # Intentionally NOT checking the wine name — a query producer of "Farella"
-    # should NOT match "Realm Cellars Farella Vineyard" just because "Farella"
-    # appears as a *vineyard name* inside the wine name.
-    producer_text = _re.sub(r"[^a-z0-9\s]", "", entry.normalized_producer.lower())
-    producer_words = set(producer_text.split())
+    q = _norm_producer(query_producer)
+    e = _norm_producer(entry.wine.producer)
 
-    # At least ONE identifying token must appear in the catalog producer name.
-    return bool(id_tokens & producer_words)
+    if not q or not e:
+        return False
+
+    score = fuzz.token_set_ratio(q, e)
+    return score >= 93
 
 
 def _significant_tokens(text: str) -> set[str]:
