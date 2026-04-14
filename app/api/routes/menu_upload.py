@@ -35,9 +35,13 @@ def _pdf_to_text(data: bytes) -> str:
     return "\n".join(pages)
 
 
-_CLAUDE_PROMPT = """\
-What wines are listed on this menu? For each wine include the name exactly as printed, the vintage year if shown, and the price. List them one per line.
-"""
+_CLAUDE_SYSTEM = (
+    "You are a helpful assistant. When shown an image, answer based only on "
+    "what is literally visible. Do not add, infer, or substitute anything "
+    "from your own knowledge."
+)
+
+_CLAUDE_PROMPT = "what wines are listed here?"
 
 
 async def _image_to_text_claude(data: bytes, media_type: str = "image/jpeg") -> str:
@@ -78,6 +82,7 @@ async def _image_to_text_claude(data: bytes, media_type: str = "image/jpeg") -> 
             message = await client.messages.create(
                 model=model,
                 max_tokens=4096,
+                system=_CLAUDE_SYSTEM,
                 messages=[{"role": "user", "content": content}],
             )
             for block in (message.content or []):
