@@ -37,17 +37,21 @@ def _pdf_to_text(data: bytes) -> str:
 
 _CLAUDE_PROMPT = """\
 Extract wine entries from this wine list image. Output one line per wine:
-NAME | VINTAGE | PRICE
+NAME | VINTAGE | PRICE | TYPE
 
 Rules for each field:
 - NAME: copy the wine name EXACTLY as printed. Do not add, correct, or complete any word you cannot clearly see.
 - VINTAGE: the 4-digit year shown anywhere near the wine (same line or next line). Use NV if printed, NONE if absent.
-- PRICE: a single number (no $ or commas). If two prices are shown (e.g. 16/28 for small/large pour), use the LARGER number. If a range like $45-55, use the higher number.
+- PRICE: a single number (no $ or commas).
+  • If a BOTTLE price is shown, use it as-is.
+  • If TWO pour prices are shown (e.g. 16/28 meaning 5oz/9oz by the glass), use the SMALLER number (the 5oz pour price).
+  • If a range like $45-55, use the lower number.
+- TYPE: write GLASS if this wine is listed in a "by the glass" section or the price is a per-glass price. Write BOTTLE otherwise.
 
 Additional rules:
 - Vintage and region often appear on the line BELOW the wine name — still associate them with that wine.
-- Skip section headers (e.g. "RED", "WHITE", "BY THE GLASS"), spirits, beer, food.
-- Only include a wine if you can see a price number. If you cannot read a word in the name, omit that wine rather than guessing.
+- Skip section headers (e.g. "RED", "WHITE", "BY THE GLASS"), spirits, beer, sake, food.
+- Only include a wine if you can see a price. If you cannot read a word in the name, omit that wine rather than guessing.
 - Do NOT use wine knowledge to complete or correct names — copy only what is visible.
 - Output ONLY data lines. No headers, notes, or explanation.
 - If there is no readable wine list with prices, output: NO_WINES
@@ -98,6 +102,8 @@ def _parse_claude_output(raw: str) -> list[dict]:
     Convert Claude's structured output (Name | Vintage | Price) into the same
     list-of-dicts format that _parse_wines produces.
     """
+    _POURS_PER_BOTTLE = 5  # standard 5oz pour → 5 pours per 750ml bottle
+
     entries: list[dict] = []
     seen: set[tuple] = set()
     for line in raw.splitlines():
@@ -107,15 +113,21 @@ def _parse_claude_output(raw: str) -> list[dict]:
         parts = [p.strip() for p in line.split("|")]
         if len(parts) < 3:
             continue
-        desc, vintage_raw, price_raw = parts[0], parts[1], parts[2]
+        desc = parts[0]
+        vintage_raw = parts[1]
+        price_raw = parts[2]
+        is_glass = len(parts) >= 4 and "GLASS" in parts[3].upper()
+
         if not desc or len(desc) < 3:
             continue
-        # Handle dual prices like "16/28" or "45/88" — take the larger
+
         price_raw = price_raw.replace(",", "").replace("$", "").strip()
+        # Handle residual dual-price format
         if "/" in price_raw:
-            price_parts = price_raw.split("/")
+            price_parts = [p.strip() for p in price_raw.split("/") if p.strip()]
             try:
-                price = max(float(p.strip()) for p in price_parts if p.strip())
+                price = min(float(p) for p in price_parts)  # smaller = 5oz pour
+                is_glass = True
             except ValueError:
                 continue
         else:
@@ -123,8 +135,15 @@ def _parse_claude_output(raw: str) -> list[dict]:
                 price = float(price_raw)
             except ValueError:
                 continue
-        if not (8 <= price <= 50_000):
+
+        if not (3 <= price <= 50_000):
             continue
+
+        # Scale glass price to bottle-equivalent for markup analysis
+        menu_price = round(price * _POURS_PER_BOTTLE, 2) if is_glass else price
+        if not (8 <= menu_price <= 50_000):
+            continue
+
         vintage_raw = vintage_raw.upper().strip()
         if vintage_raw in ("NONE", "N/A", "", "-"):
             vintage: int | None = None
@@ -134,11 +153,20 @@ def _parse_claude_output(raw: str) -> list[dict]:
             vintage = int(vintage_raw)
         else:
             vintage = None
-        key = (desc.lower()[:45], vintage, int(price))
+
+        # Annotate name so UI can show glass context
+        display_desc = f"{desc} (by glass)" if is_glass else desc
+
+        key = (desc.lower()[:45], vintage, int(menu_price))
         if key in seen:
             continue
         seen.add(key)
-        entries.append({"desc": desc, "vintage": vintage, "menu_price": price})
+        entries.append({
+            "desc": display_desc,
+            "vintage": vintage,
+            "menu_price": menu_price,
+            "glass_price": price if is_glass else None,
+        })
     return entries
 
 
